@@ -20,9 +20,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -45,7 +45,13 @@ jobs:
       # Serving index.html as the 404 page is the standard remedy.
       - run: cp dist/index.html dist/404.html
 
+      # enablement turns Pages on via the API if it has never been enabled,
+      # rather than failing with "Get Pages site failed" and making someone
+      # go and click it in Settings.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
