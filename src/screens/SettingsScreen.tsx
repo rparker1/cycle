@@ -27,6 +27,7 @@ export function SettingsScreen() {
   const [password, setPassword] = useState('')
   const [authBusy, setAuthBusy] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
+  const [authNotice, setAuthNotice] = useState<string | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const [theme, setTheme] = useState<Theme>(
     (localStorage.getItem('cycle.theme') as Theme | null) ?? 'system',
@@ -46,9 +47,20 @@ export function SettingsScreen() {
   const authenticate = async (mode: 'in' | 'up') => {
     setAuthBusy(true)
     setAuthError(null)
+    setAuthNotice(null)
     try {
-      if (mode === 'in') await signIn(email, password)
-      else await signUp(email, password)
+      if (mode === 'in') {
+        await signIn(email, password)
+      } else {
+        const { needsConfirmation } = await signUp(email, password)
+        if (needsConfirmation) {
+          setAuthNotice(
+            `Account created. Check ${email} for a confirmation link, then come back and sign in.`,
+          )
+          setAuthBusy(false)
+          return
+        }
+      }
       await refreshSession()
       await sync()
       setPassword('')
@@ -213,20 +225,25 @@ export function SettingsScreen() {
                   {authError}
                 </p>
               )}
-              <div className="stat-grid">
+              {authNotice && (
+                <p className="fine-print" style={{ color: 'var(--green)' }}>
+                  {authNotice}
+                </p>
+              )}
+              <div className="stack" style={{ gap: 10 }}>
                 <button
-                  className="btn btn--quiet"
-                  disabled={authBusy || !email || !password}
-                  onClick={() => void authenticate('up')}
-                >
-                  Create account
-                </button>
-                <button
-                  className="btn btn--primary"
+                  className="btn btn--primary btn--block"
                   disabled={authBusy || !email || !password}
                   onClick={() => void authenticate('in')}
                 >
                   Sign in
+                </button>
+                <button
+                  className="btn btn--quiet btn--block"
+                  disabled={authBusy || !email || !password}
+                  onClick={() => void authenticate('up')}
+                >
+                  Create account
                 </button>
               </div>
             </>

@@ -54,11 +54,23 @@ export async function signIn(email: string, password: string): Promise<void> {
   if (error) throw error
 }
 
-export async function signUp(email: string, password: string): Promise<void> {
+/**
+ * Create an account.
+ *
+ * Supabase confirms email addresses by default, and when it does, sign-up
+ * returns no session — the account exists but cannot be used until a link in
+ * an email is clicked. Reporting that back is the difference between a clear
+ * instruction and a screen that appears to have ignored you.
+ */
+export async function signUp(
+  email: string,
+  password: string,
+): Promise<{ needsConfirmation: boolean }> {
   const sb = await getSupabase()
   if (!sb) throw new Error('Sync is not configured in this build.')
-  const { error } = await sb.auth.signUp({ email, password })
+  const { data, error } = await sb.auth.signUp({ email, password })
   if (error) throw error
+  return { needsConfirmation: data.session === null }
 }
 
 export async function signOut(): Promise<void> {
