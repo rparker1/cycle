@@ -1,0 +1,123 @@
+/*
+ * Design tokens.
+ *
+ * Colours are sampled from the approved Base44 screens: warm cream ground,
+ * coral-rose for action, amber for fertile, deeper orange for ovulation, mint
+ * for reassurance.
+ *
+ * Type is `ui-rounded`, which resolves to SF Pro Rounded on iOS. That is the
+ * closest thing to the reference typeface, it is already on the device, and it
+ * needs no network — which matters for an app that must open in a basement
+ * with no signal.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --cream: #faf7f3;
+  --surface: #ffffff;
+  --surface-sunken: #f5f1ec;
+  --hairline: rgba(62, 48, 52, 0.07);
+
+  --ink: #3e3034;
+  /* Contrast-checked against --cream and --surface: 6.2:1 and 5.0:1 at
+     13px. The lighter greys they replaced measured 2.7:1, which fails
+     WCAG AA for body text — not acceptable on a screen that carries
+     contraception guidance. */
+  --ink-soft: #675a5e;
+  --ink-faint: #7d6c71;
+  --ink-inverse: #ffffff;
+
+  --rose: #e0607e;
+  --rose-press: #c85068;
+  --rose-deep: #c85c75;
+  --rose-soft: #fbe9ee;
+  --hero-from: #ef9db4;
+  --hero-to: #dd6d8b;
+
+  --amber: #e0a83f;
+  /* 5.0:1 on --amber-soft. */
+  --amber-ink: #8a6110;
+  --amber-soft: #fcf2df;
+
+  --orange: #dd7526;
+  /* 5.2:1 on --orange-soft. */
+  --orange-ink: #a84a12;
+  --orange-soft: #fdf0e4;
+
+  --mint: #a5cda8;
+  --green: #2e7d53;
+  --green-soft: #eaf7ee;
+  --green-line: #c8e8d1;
+
+  --radius-hero: 28px;
+  --radius-card: 20px;
+  --radius-sm: 14px;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 1px 2px rgba(62, 48, 52, 0.04), 0 8px 24px rgba(62, 48, 52, 0.05);
+  --shadow-hero: 0 12px 32px rgba(221, 109, 139, 0.28);
+  --shadow-nav: 0 8px 30px rgba(62, 48, 52, 0.14);
+  --shadow-sheet: 0 -8px 40px rgba(62, 48, 52, 0.18);
+
+  --gutter: 20px;
+  --nav-height: 68px;
+
+  --font: ui-rounded, 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', 'Quicksand',
+    system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* iOS default easing. Motion should feel like the platform, not the web. */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/*
+ * Dark mode. A period tracker gets opened at 2am more than most apps, and a
+ * full-brightness cream screen at that hour is a design failure.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --cream: #171416;
+    --surface: #221c1f;
+    --surface-sunken: #1d1719;
+    --hairline: rgba(255, 255, 255, 0.08);
+
+    --ink: #f3eaec;
+    /* 8.2:1 and 5.2:1 on --surface. */
+    --ink-soft: #c0b0b5;
+    --ink-faint: #9b8b90;
+
+    --rose-soft: #3a2129;
+    --amber-soft: #33291a;
+    --amber-ink: #e8be6a;
+    --orange-soft: #33231a;
+    --orange-ink: #f0996a;
+    --green: #7fd1a2;
+    --green-soft: #172b20;
+    --green-line: #2c4a38;
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
+    --shadow-nav: 0 8px 30px rgba(0, 0, 0, 0.45);
+    --shadow-sheet: 0 -8px 40px rgba(0, 0, 0, 0.5);
+  }
+}
+
+:root[data-theme='dark'] {
+  --cream: #171416;
+  --surface: #221c1f;
+  --surface-sunken: #1d1719;
+  --hairline: rgba(255, 255, 255, 0.08);
+  --ink: #f3eaec;
+  --ink-soft: #c0b0b5;
+  --ink-faint: #9b8b90;
+  --rose-soft: #3a2129;
+  --amber-soft: #33291a;
+  --amber-ink: #e8be6a;
+  --orange-soft: #33231a;
+  --orange-ink: #f0996a;
+  --green: #7fd1a2;
+  --green-soft: #172b20;
+  --green-line: #2c4a38;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
+  --shadow-nav: 0 8px 30px rgba(0, 0, 0, 0.45);
+  --shadow-sheet: 0 -8px 40px rgba(0, 0, 0, 0.5);
+}

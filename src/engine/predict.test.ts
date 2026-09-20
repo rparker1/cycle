@@ -239,3 +239,34 @@ describe('assessDay logged versus predicted', () => {
     expect(day.isPeriod).toBe(false)
   })
 })
+
+describe('assessDay current period shading', () => {
+  // Logging day one and getting on with your life is the normal case. The
+  // calendar should still show the days the period is expected to run.
+  test('shades the rest of the expected period as predicted', () => {
+    const engine = createEngine(input([aPeriodStart('2026-09-20')], '2026-09-20'))
+
+    expect(engine.assessDay('2026-09-20').isPeriod).toBe(true)
+    expect(engine.assessDay('2026-09-22').isPredictedPeriod).toBe(true)
+    expect(engine.assessDay('2026-09-24').isPredictedPeriod).toBe(true)
+    expect(engine.assessDay('2026-09-25').isPredictedPeriod).toBe(false)
+  })
+
+  test('stops shading once the user marks the period finished', () => {
+    const logs = [
+      aPeriodStart('2026-09-20'),
+      aPeriodDay('2026-09-22', { isPeriodEnd: true }),
+    ]
+    const engine = createEngine(input(logs, '2026-09-25'))
+
+    expect(engine.assessDay('2026-09-24').isPredictedPeriod).toBe(false)
+  })
+
+  test('does not shade a logged day as predicted', () => {
+    const logs = [aPeriodStart('2026-09-20'), aPeriodDay('2026-09-21')]
+    const engine = createEngine(input(logs, '2026-09-25'))
+
+    expect(engine.assessDay('2026-09-21').isPeriod).toBe(true)
+    expect(engine.assessDay('2026-09-21').isPredictedPeriod).toBe(false)
+  })
+})

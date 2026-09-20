@@ -125,6 +125,17 @@ export function createEngine(engineInput: EngineInput): Engine {
 
   const predictedPeriodEnd = addDays(nextPeriodLikely, profile.avgPeriodLength - 1)
 
+  /*
+   * The days this period is still expected to run. Most people tap "period"
+   * on day one and then get on with their life, so without this the calendar
+   * would show a single shaded day for a five-day period.
+   */
+  const currentStart = current.startDate
+  const currentPeriodEnd =
+    current.periodEndConfirmed && current.periodEndDate !== null
+      ? current.periodEndDate
+      : addDays(currentStart, Math.max(1, profile.avgPeriodLength) - 1)
+
   function assessDay(date: IsoDate): DayAssessment {
     const cycle = cycleContaining(cycles, date)
     const log = logsByDate.get(date)
@@ -150,7 +161,9 @@ export function createEngine(engineInput: EngineInput): Engine {
       risk,
       isPeriod: log?.isPeriod === true,
       isPredictedPeriod:
-        log?.isPeriod !== true && isWithin(date, nextPeriodLikely, predictedPeriodEnd),
+        log?.isPeriod !== true &&
+        (isWithin(date, nextPeriodLikely, predictedPeriodEnd) ||
+          isWithin(date, currentStart, currentPeriodEnd)),
       isOvulation: date === ovulationLikely,
       isFertile,
     }

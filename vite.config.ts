@@ -10,6 +10,7 @@ const BASE = process.env.VITE_BASE_PATH ?? '/cycle/'
 
 export default defineConfig({
   base: BASE,
+  server: { port: 5273, strictPort: true },
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
