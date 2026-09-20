@@ -68,7 +68,18 @@ export async function signUp(
 ): Promise<{ needsConfirmation: boolean }> {
   const sb = await getSupabase()
   if (!sb) throw new Error('Sync is not configured in this build.')
-  const { data, error } = await sb.auth.signUp({ email, password })
+  const { data, error } = await sb.auth.signUp({
+    email,
+    password,
+    options: {
+      // Where the confirmation link should land. Without this, Supabase
+      // falls back to the project's Site URL, which defaults to
+      // http://localhost:3000 — so the link dumps you on a dead page.
+      // The address must also be allow-listed in the dashboard under
+      // Authentication → URL Configuration.
+      emailRedirectTo: `${window.location.origin}${import.meta.env.BASE_URL}`,
+    },
+  })
   if (error) throw error
   return { needsConfirmation: data.session === null }
 }
