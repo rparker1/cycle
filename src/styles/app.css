@@ -381,6 +381,13 @@ p {
   pointer-events: none;
 }
 
+/* Paired buttons share a narrow column; the default padding makes two-word
+   labels wrap. */
+.stat-grid > .btn {
+  padding: 0 12px;
+  font-size: 16px;
+}
+
 /* The floating action button. It sits above the nav, never behind it. */
 .fab-dock {
   position: fixed;

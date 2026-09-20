@@ -7,6 +7,7 @@
  */
 
 import { todayIso } from '@/lib/date'
+import { planPeriodRemoval, planPeriodRun, type DayWrite } from '@/engine/logging'
 import type { CycleResolution, DayLog, IsoDate, Profile, Resolution } from '@/engine/types'
 import { getDb } from './db'
 
@@ -183,36 +184,30 @@ export const localRepository: CycleRepository = {
 }
 
 /**
- * Log a period start, and tidy up around it.
+ * Record a whole period in one action.
  *
- * Marking a day as the start of a period implies it is a period day, and
- * implies the days immediately around it are not *also* starts — a second
- * start two days later is almost always a mis-tap, and left alone it would
- * create a two-day "cycle" that poisons the baseline.
+ * Deciding *what* to write lives in `@/engine/logging` and is unit tested;
+ * this only performs the writes.
  */
-export async function logPeriodStart(
+export async function logPeriod(
   repo: CycleRepository,
-  date: IsoDate,
-  patch: Partial<DayLog> = {},
+  startDate: IsoDate,
+  lengthDays: number,
 ): Promise<void> {
   const logs = await repo.listDayLogs()
-  const nearbyStarts = logs.filter(
-    (l) => l.isPeriodStart && l.logDate !== date && withinDays(l.logDate, date, 3),
-  )
-  for (const stray of nearbyStarts) {
-    await repo.upsertDayLog(stray.logDate, { isPeriodStart: false })
-  }
-  await repo.upsertDayLog(date, {
-    isPeriod: true,
-    isPeriodStart: true,
-    flow: patch.flow ?? 'medium',
-    ...patch,
-  })
+  await applyDayWrites(repo, planPeriodRun(logs, startDate, lengthDays))
 }
 
-function withinDays(a: IsoDate, b: IsoDate, days: number): boolean {
-  const diff = Math.abs(new Date(`${a}T00:00:00`).getTime() - new Date(`${b}T00:00:00`).getTime())
-  return diff <= days * 86_400_000
+/** Undo a logged period — the whole run, not just the day that was tapped. */
+export async function removePeriod(repo: CycleRepository, date: IsoDate): Promise<void> {
+  const logs = await repo.listDayLogs()
+  await applyDayWrites(repo, planPeriodRemoval(logs, date))
+}
+
+async function applyDayWrites(repo: CycleRepository, writes: DayWrite[]): Promise<void> {
+  for (const write of writes) {
+    await repo.upsertDayLog(write.date, write.patch)
+  }
 }
 
 export { DEFAULT_PROFILE, blankLog, newId, todayIso }

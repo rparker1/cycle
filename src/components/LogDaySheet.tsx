@@ -10,8 +10,12 @@
 import { useEffect, useState } from 'react'
 import { Sheet } from './Sheet'
 import { Icon } from './Icon'
+import { Stepper } from './Stepper'
 import { useCycleStore } from '@/store/useCycleStore'
+import { MAX_PERIOD_DAYS } from '@/engine/logging'
 import { OVULATION_SIGNS, SYMPTOMS } from '@/lib/guidance'
+import { addDays } from '@/lib/date'
+import { formatRange } from '@/lib/format'
 import type { Flow } from '@/engine/types'
 
 type Step = 'choose' | 'period' | 'fertile' | 'ovulation' | 'done'
@@ -24,11 +28,11 @@ interface Props {
 const FLOWS: Flow[] = ['spotting', 'light', 'medium', 'heavy']
 
 export function LogDaySheet({ open, onClose }: Props) {
-  const { today, logs, engine, markPeriodStart, updateDay } = useCycleStore()
+  const { today, logs, engine, profile, logPeriod, updateDay } = useCycleStore()
   const [step, setStep] = useState<Step>('choose')
 
   const [startDate, setStartDate] = useState(today)
-  const [endDate, setEndDate] = useState('')
+  const [periodLength, setPeriodLength] = useState(profile.avgPeriodLength)
   const [flow, setFlow] = useState<Flow>('medium')
   const [symptoms, setSymptoms] = useState<string[]>([])
   const [activity, setActivity] = useState(false)
@@ -54,7 +58,7 @@ export function LogDaySheet({ open, onClose }: Props) {
     if (!open) return
     setStep('choose')
     setStartDate(today)
-    setEndDate('')
+    setPeriodLength(profile.avgPeriodLength)
     setFlow(existing?.flow ?? 'medium')
     setSymptoms(existing?.symptoms ?? [])
     setActivity(existing?.sexualActivity === true)
@@ -71,16 +75,16 @@ export function LogDaySheet({ open, onClose }: Props) {
   const finish = () => setStep('done')
 
   const savePeriod = async () => {
-    await markPeriodStart(startDate, {
+    // The run first, so every day of the period exists, then the detail that
+    // belongs to the day the user is actually describing.
+    await logPeriod(startDate, periodLength)
+    await updateDay(startDate, {
       flow,
       symptoms,
       sexualActivity: activity ? true : null,
       protectionUsed: activity ? protection : null,
       notes: notes.trim() || null,
     })
-    if (endDate) {
-      await updateDay(endDate, { isPeriod: true, isPeriodEnd: true })
-    }
     finish()
   }
 
@@ -171,32 +175,37 @@ export function LogDaySheet({ open, onClose }: Props) {
 
       {step === 'period' && (
         <div className="stack">
-          <div className="stat-grid">
-            <label className="field">
-              <span className="label">Start date</span>
-              <input
-                type="date"
-                value={startDate}
-                max={today}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </label>
-            <label className="field">
-              <span className="label">End date (optional)</span>
-              <input
-                type="date"
-                value={endDate}
-                min={startDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </label>
-          </div>
+          <label className="field">
+            <span className="label">First day of this period</span>
+            <input
+              type="date"
+              value={startDate}
+              max={today}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+          </label>
+
+          <Stepper
+            label="How many days did it last?"
+            suffix="days"
+            value={periodLength}
+            min={1}
+            max={MAX_PERIOD_DAYS}
+            onChange={setPeriodLength}
+          />
+
+          <p className="fine-print" style={{ marginTop: -6 }}>
+            Books in {formatRange(startDate, addDays(startDate, Math.max(1, periodLength) - 1))}.
+            You can change the length later by tapping any of those days.
+          </p>
 
           <div>
             <p className="label" style={{ marginBottom: 8 }}>
               Flow
             </p>
-            <div className="segmented">
+            {/* Wrapping pills rather than fixed columns: four equal columns
+                cannot fit "Spotting" at phone width, and it clipped. */}
+            <div className="chip-wrap">
               {FLOWS.map((f) => (
                 <button
                   key={f}
@@ -242,7 +251,7 @@ export function LogDaySheet({ open, onClose }: Props) {
           </label>
 
           <button className="btn btn--primary btn--block" onClick={() => void savePeriod()}>
-            Save period
+            Save {periodLength}-day period
           </button>
         </div>
       )}

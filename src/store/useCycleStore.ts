@@ -11,7 +11,12 @@ import { createEngine, type Engine } from '@/engine/predict'
 import type { CycleResolution, DayLog, IsoDate, Profile, Resolution } from '@/engine/types'
 import { todayIso } from '@/lib/date'
 import { requestPersistence } from '@/data/db'
-import { localRepository, logPeriodStart, type ExportBundle } from '@/data/repository'
+import {
+  localRepository,
+  logPeriod,
+  removePeriod,
+  type ExportBundle,
+} from '@/data/repository'
 import { getSession, syncConfigured, syncNow, type SyncResult } from '@/data/sync'
 
 export type SyncStatus = 'idle' | 'syncing' | 'ok' | 'error' | 'off'
@@ -38,8 +43,10 @@ interface State {
     lastPeriodStart: IsoDate
   }): Promise<void>
   updateDay(date: IsoDate, patch: Partial<DayLog>): Promise<void>
-  markPeriodStart(date: IsoDate, patch?: Partial<DayLog>): Promise<void>
-  clearDay(date: IsoDate): Promise<void>
+  /** Record a whole period: a start date and how many days it ran. */
+  logPeriod(startDate: IsoDate, lengthDays: number): Promise<void>
+  /** Undo a logged period — the whole run, not just one day. */
+  removePeriod(date: IsoDate): Promise<void>
   resolveCycle(
     cycleStart: IsoDate,
     resolution: Resolution,
@@ -121,7 +128,7 @@ export const useCycleStore = create<State>((set, get) => ({
       avgPeriodLength: input.avgPeriodLength,
       onboardedAt: new Date().toISOString(),
     })
-    await logPeriodStart(localRepository, input.lastPeriodStart)
+    await logPeriod(localRepository, input.lastPeriodStart, input.avgPeriodLength)
     void requestPersistence()
     await reload(set, get)
   },
@@ -131,13 +138,13 @@ export const useCycleStore = create<State>((set, get) => ({
     await reload(set, get)
   },
 
-  async markPeriodStart(date, patch = {}) {
-    await logPeriodStart(localRepository, date, patch)
+  async logPeriod(startDate, lengthDays) {
+    await logPeriod(localRepository, startDate, lengthDays)
     await reload(set, get)
   },
 
-  async clearDay(date) {
-    await localRepository.deleteDayLog(date)
+  async removePeriod(date) {
+    await removePeriod(localRepository, date)
     await reload(set, get)
   },
 
@@ -151,7 +158,7 @@ export const useCycleStore = create<State>((set, get) => ({
    * Also files the resolution, so the original cycle is not queried again.
    */
   async insertMissedPeriod(date, cycleStart) {
-    await logPeriodStart(localRepository, date)
+    await logPeriod(localRepository, date, get().profile.avgPeriodLength)
     await localRepository.resolveCycle(cycleStart, 'missed_period', {
       note: `Missed period recorded on ${date}.`,
     })
