@@ -13,6 +13,7 @@
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import type { CycleResolution, DayLog, IsoDate, Profile } from '@/engine/types'
 import { getDb } from './db'
+import { mergeProfile, type ProfileRecord } from './profileMerge'
 import type { CycleRepository } from './repository'
 
 const URL = import.meta.env.VITE_SUPABASE_URL as string | undefined
@@ -281,7 +282,7 @@ export async function syncNow(repo: CycleRepository): Promise<SyncResult> {
       pushed += localRes.length
     }
 
-    await pushProfile(sb, repo, userId)
+    await syncProfile(sb, repo, userId)
 
     await db.put('meta', { ...meta, lastPulledAt: startedAt, lastPushedAt: startedAt })
     return { status: 'ok', pulled, pushed }
@@ -295,12 +296,62 @@ export async function syncNow(repo: CycleRepository): Promise<SyncResult> {
   }
 }
 
-async function pushProfile(
+interface ProfileRow {
+  display_name: string | null
+  app_name: string
+  avg_cycle_length: number
+  avg_period_length: number
+  luteal_length: number
+  onboarded_at: string | null
+  updated_at: string
+}
+
+/**
+ * Two-way, not push-only.
+ *
+ * Pushing alone meant a new device could never learn it had already been set
+ * up: it would onboard again, invent a period start, and overwrite the real
+ * profile on the server. Which side wins is decided by `mergeProfile`, and
+ * tested there.
+ */
+async function syncProfile(
   sb: SupabaseClient,
   repo: CycleRepository,
   userId: string,
 ): Promise<void> {
-  const profile: Profile = await repo.getProfile()
+  const local = await repo.getProfileRecord()
+
+  const { data } = await sb
+    .from('profiles')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  const row = data as ProfileRow | null
+  const remote: ProfileRecord | null =
+    row === null
+      ? null
+      : {
+          updatedAt: row.updated_at,
+          profile: {
+            displayName: row.display_name,
+            appName: row.app_name,
+            avgCycleLength: row.avg_cycle_length,
+            avgPeriodLength: row.avg_period_length,
+            lutealLength: row.luteal_length,
+            onboardedAt: row.onboarded_at,
+          },
+        }
+
+  const merged = mergeProfile(local, remote)
+  if (merged.direction === 'none') return
+
+  if (merged.direction === 'pull') {
+    await repo.replaceProfile(merged.profile, merged.updatedAt)
+    return
+  }
+
+  const profile: Profile = merged.profile
   await sb.from('profiles').upsert(
     {
       user_id: userId,

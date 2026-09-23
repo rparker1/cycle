@@ -8,6 +8,7 @@
 
 import { todayIso } from '@/lib/date'
 import { planPeriodRemoval, planPeriodRun, type DayWrite } from '@/engine/logging'
+import type { ProfileRecord } from './profileMerge'
 import type { CycleResolution, DayLog, IsoDate, Profile, Resolution } from '@/engine/types'
 import { getDb } from './db'
 
@@ -22,7 +23,11 @@ const DEFAULT_PROFILE: Profile = {
 
 export interface CycleRepository {
   getProfile(): Promise<Profile>
+  /** The profile plus when it last changed, for the sync merge. */
+  getProfileRecord(): Promise<ProfileRecord>
   saveProfile(patch: Partial<Profile>): Promise<Profile>
+  /** Overwrite wholesale, keeping the timestamp the other side reported. */
+  replaceProfile(profile: Profile, updatedAt: string): Promise<void>
   listDayLogs(): Promise<DayLog[]>
   getDayLog(date: IsoDate): Promise<DayLog | null>
   upsertDayLog(date: IsoDate, patch: Partial<DayLog>): Promise<DayLog>
@@ -48,6 +53,9 @@ export interface ExportBundle {
 }
 
 const now = (): string => new Date().toISOString()
+
+/** Stands in for "never edited on this device", so any real profile beats it. */
+const EPOCH = '1970-01-01T00:00:00.000Z'
 
 const newId = (): string =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -86,12 +94,25 @@ export const localRepository: CycleRepository = {
     return profile
   },
 
+  async getProfileRecord() {
+    const db = await getDb()
+    const stored = await db.get('profile', 'me')
+    if (!stored) return { profile: { ...DEFAULT_PROFILE }, updatedAt: EPOCH }
+    const { key: _key, updatedAt, ...profile } = stored
+    return { profile, updatedAt }
+  },
+
   async saveProfile(patch) {
     const db = await getDb()
     const current = await this.getProfile()
     const next = { ...current, ...patch }
     await db.put('profile', { ...next, key: 'me', updatedAt: now() })
     return next
+  },
+
+  async replaceProfile(profile, updatedAt) {
+    const db = await getDb()
+    await db.put('profile', { ...profile, key: 'me', updatedAt })
   },
 
   async listDayLogs() {

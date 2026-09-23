@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
 import { useCycleStore } from '@/store/useCycleStore'
+import { AuthForm } from '@/components/AuthForm'
 import { Icon } from '@/components/Icon'
 import { Stepper } from '@/components/Stepper'
-import { syncConfigured, signIn, signOut, signUp } from '@/data/sync'
+import { syncConfigured, signOut } from '@/data/sync'
 import { requestPersistence } from '@/data/db'
 import { DISCLAIMER } from '@/lib/guidance'
 
@@ -23,11 +24,6 @@ export function SettingsScreen() {
   } = useCycleStore()
 
   const fileInput = useRef<HTMLInputElement>(null)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [authBusy, setAuthBusy] = useState(false)
-  const [authError, setAuthError] = useState<string | null>(null)
-  const [authNotice, setAuthNotice] = useState<string | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
   const [theme, setTheme] = useState<Theme>(
     (localStorage.getItem('cycle.theme') as Theme | null) ?? 'system',
@@ -42,33 +38,6 @@ export function SettingsScreen() {
     }
     if (next === 'system') document.documentElement.removeAttribute('data-theme')
     else document.documentElement.setAttribute('data-theme', next)
-  }
-
-  const authenticate = async (mode: 'in' | 'up') => {
-    setAuthBusy(true)
-    setAuthError(null)
-    setAuthNotice(null)
-    try {
-      if (mode === 'in') {
-        await signIn(email, password)
-      } else {
-        const { needsConfirmation } = await signUp(email, password)
-        if (needsConfirmation) {
-          setAuthNotice(
-            `Account created. Check ${email} for a confirmation link, then come back and sign in.`,
-          )
-          setAuthBusy(false)
-          return
-        }
-      }
-      await refreshSession()
-      await sync()
-      setPassword('')
-    } catch (error) {
-      setAuthError(error instanceof Error ? error.message : 'Could not sign in.')
-    } finally {
-      setAuthBusy(false)
-    }
   }
 
   const doExport = async () => {
@@ -104,14 +73,6 @@ export function SettingsScreen() {
               value={profile.displayName ?? ''}
               placeholder="Optional"
               onChange={(e) => void saveProfile({ displayName: e.target.value || null })}
-            />
-          </label>
-          <label className="field">
-            <span className="label">App name</span>
-            <input
-              type="text"
-              value={profile.appName}
-              onChange={(e) => void saveProfile({ appName: e.target.value })}
             />
           </label>
         </section>
@@ -201,52 +162,7 @@ export function SettingsScreen() {
               </div>
             </>
           ) : (
-            <>
-              <label className="field">
-                <span className="label">Email</span>
-                <input
-                  type="email"
-                  autoComplete="username"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span className="label">Password</span>
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </label>
-              {authError && (
-                <p className="fine-print" style={{ color: 'var(--rose-deep)' }}>
-                  {authError}
-                </p>
-              )}
-              {authNotice && (
-                <p className="fine-print" style={{ color: 'var(--green)' }}>
-                  {authNotice}
-                </p>
-              )}
-              <div className="stack" style={{ gap: 10 }}>
-                <button
-                  className="btn btn--primary btn--block"
-                  disabled={authBusy || !email || !password}
-                  onClick={() => void authenticate('in')}
-                >
-                  Sign in
-                </button>
-                <button
-                  className="btn btn--quiet btn--block"
-                  disabled={authBusy || !email || !password}
-                  onClick={() => void authenticate('up')}
-                >
-                  Create account
-                </button>
-              </div>
-            </>
+            <AuthForm />
           )}
         </section>
 

@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useCycleStore } from '@/store/useCycleStore'
+import { AuthForm } from '@/components/AuthForm'
 import { Icon } from '@/components/Icon'
+import { Sheet } from '@/components/Sheet'
 import { Stepper } from '@/components/Stepper'
+import { syncConfigured } from '@/data/sync'
 import { todayIso } from '@/lib/date'
 import { DISCLAIMER } from '@/lib/guidance'
 
@@ -12,12 +15,12 @@ export function OnboardingScreen() {
   const completeOnboarding = useCycleStore((s) => s.completeOnboarding)
 
   const [step, setStep] = useState(0)
-  const [appName, setAppName] = useState('Cycle')
   const [displayName, setDisplayName] = useState('')
   const [cycleLength, setCycleLength] = useState(28)
   const [periodLength, setPeriodLength] = useState(5)
   const [lastPeriod, setLastPeriod] = useState('')
   const [saving, setSaving] = useState(false)
+  const [signingIn, setSigningIn] = useState(false)
 
   const next = () => setStep((s) => Math.min(STEPS - 1, s + 1))
   const back = () => setStep((s) => Math.max(0, s - 1))
@@ -25,7 +28,6 @@ export function OnboardingScreen() {
   const finish = async () => {
     setSaving(true)
     await completeOnboarding({
-      appName,
       displayName,
       avgCycleLength: cycleLength,
       avgPeriodLength: periodLength,
@@ -78,14 +80,6 @@ export function OnboardingScreen() {
                     value={displayName}
                     placeholder="Optional"
                     onChange={(e) => setDisplayName(e.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  <span className="label">What should the app be called?</span>
-                  <input
-                    type="text"
-                    value={appName}
-                    onChange={(e) => setAppName(e.target.value)}
                   />
                 </label>
               </>
@@ -185,8 +179,29 @@ export function OnboardingScreen() {
               Back
             </button>
           )}
+
+          {/* Always reachable. Someone part-way through setup may realise they
+              already have an account, and nothing is written until the final
+              step — so switching costs them nothing. */}
+          {syncConfigured() && (
+            <button
+              className="btn btn--block"
+              style={{ background: 'transparent', color: 'var(--ink-soft)', minHeight: 44 }}
+              onClick={() => setSigningIn(true)}
+            >
+              Already have an account? Sign in
+            </button>
+          )}
         </div>
       </div>
+
+      <Sheet open={signingIn} title="Sign in" onClose={() => setSigningIn(false)}>
+        <p className="muted" style={{ marginBottom: 14 }}>
+          Signing in restores your cycle history and settings. Nothing you've entered
+          here has been saved yet.
+        </p>
+        <AuthForm onSignedIn={() => setSigningIn(false)} />
+      </Sheet>
     </div>
   )
 }

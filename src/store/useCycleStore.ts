@@ -36,7 +36,6 @@ interface State {
   refreshToday(): void
   saveProfile(patch: Partial<Profile>): Promise<void>
   completeOnboarding(input: {
-    appName: string
     displayName: string
     avgCycleLength: number
     avgPeriodLength: number
@@ -122,7 +121,6 @@ export const useCycleStore = create<State>((set, get) => ({
 
   async completeOnboarding(input) {
     await localRepository.saveProfile({
-      appName: input.appName.trim() || 'Cycle',
       displayName: input.displayName.trim() || null,
       avgCycleLength: input.avgCycleLength,
       avgPeriodLength: input.avgPeriodLength,
