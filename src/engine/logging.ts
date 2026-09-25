@@ -68,6 +68,7 @@ export function planPeriodRun(
       isPeriod: true,
       isPeriodStart: i === 0,
       isPeriodEnd: i === length - 1,
+      noBleed: false,
     }
     // Leave a flow the user already chose; only fill a blank one.
     if (!current?.flow) patch.flow = 'medium'

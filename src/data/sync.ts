@@ -94,13 +94,14 @@ export async function signOut(): Promise<void> {
 // Row mapping. The database is snake_case; the app is camelCase.
 // ---------------------------------------------------------------------------
 
-interface DayLogRow {
+export interface DayLogRow {
   id: string
   user_id: string
   log_date: IsoDate
   is_period: boolean
   is_period_start: boolean
   is_period_end: boolean
+  no_bleed: boolean
   flow: DayLog['flow']
   felt_fertile: boolean
   ovulation_claimed: boolean
@@ -116,12 +117,14 @@ interface DayLogRow {
   deleted_at: string | null
 }
 
-const toDayLog = (r: DayLogRow): DayLog => ({
+export const toDayLog = (r: DayLogRow): DayLog => ({
   id: r.id,
   logDate: r.log_date,
   isPeriod: r.is_period,
   isPeriodStart: r.is_period_start,
   isPeriodEnd: r.is_period_end,
+  // Absent until migration 0002 has been applied to the project.
+  noBleed: r.no_bleed === true && r.is_period !== true,
   flow: r.flow,
   feltFertile: r.felt_fertile,
   ovulationClaimed: r.ovulation_claimed,
@@ -137,12 +140,14 @@ const toDayLog = (r: DayLogRow): DayLog => ({
   deletedAt: r.deleted_at,
 })
 
-const fromDayLog = (l: DayLog, userId: string): Omit<DayLogRow, 'id'> & { id?: string } => ({
+export const fromDayLog = (l: DayLog, userId: string): Omit<DayLogRow, 'id'> & { id?: string } => ({
   user_id: userId,
   log_date: l.logDate,
   is_period: l.isPeriod,
   is_period_start: l.isPeriodStart,
   is_period_end: l.isPeriodEnd,
+  // The database rejects the pair together, so never send it.
+  no_bleed: l.noBleed === true && l.isPeriod !== true,
   flow: l.flow,
   felt_fertile: l.feltFertile,
   ovulation_claimed: l.ovulationClaimed,

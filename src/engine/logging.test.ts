@@ -112,6 +112,13 @@ describe('planPeriodRun', () => {
 
     expect(writes.some((w) => w.date === '2026-09-30')).toBe(false)
   })
+
+  test('clears a not-yet answer on every day it books', () => {
+    const logs = [aLog('2026-09-24', { noBleed: true })]
+    const writes = planPeriodRun(logs, '2026-09-24', 3)
+    expect(writes.filter((w) => w.patch.isPeriod === true).every((w) => w.patch.noBleed === false))
+      .toBe(true)
+  })
 })
 
 describe('planPeriodRemoval', () => {

@@ -21,6 +21,11 @@ export interface DayLog {
   isPeriod: boolean
   isPeriodStart: boolean
   isPeriodEnd: boolean
+  /**
+   * The user explicitly said they were not bleeding this day. Distinct from
+   * "nothing logged", which means we do not know. Never true with `isPeriod`.
+   */
+  noBleed: boolean
   flow: Flow | null
   feltFertile: boolean
   ovulationClaimed: boolean
