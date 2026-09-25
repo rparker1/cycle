@@ -7,9 +7,9 @@
  */
 
 import { todayIso } from '@/lib/date'
-import { planPeriodRemoval, planPeriodRun, type DayWrite } from '@/engine/logging'
+import { planBleedingReport, planPeriodRemoval, planPeriodRun, type DayWrite } from '@/engine/logging'
 import type { ProfileRecord } from './profileMerge'
-import type { CycleResolution, DayLog, IsoDate, Profile, Resolution } from '@/engine/types'
+import type { CycleResolution, DayLog, Flow, IsoDate, Profile, Resolution } from '@/engine/types'
 import { getDb } from './db'
 import { normaliseDayLog } from './normalise'
 
@@ -227,6 +227,18 @@ export async function logPeriod(
 export async function removePeriod(repo: CycleRepository, date: IsoDate): Promise<void> {
   const logs = await repo.listDayLogs()
   await applyDayWrites(repo, planPeriodRemoval(logs, date))
+}
+
+/** Answer "were you bleeding this day?" for a day of the current period. */
+export async function reportBleeding(
+  repo: CycleRepository,
+  cycleStart: IsoDate,
+  date: IsoDate,
+  bleeding: boolean,
+  flow?: Flow,
+): Promise<void> {
+  const logs = await repo.listDayLogs()
+  await applyDayWrites(repo, planBleedingReport(logs, cycleStart, date, bleeding, flow))
 }
 
 async function applyDayWrites(repo: CycleRepository, writes: DayWrite[]): Promise<void> {

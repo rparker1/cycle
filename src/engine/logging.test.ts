@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { MAX_PERIOD_DAYS, planPeriodRemoval, planPeriodRun } from './logging'
+import { MAX_PERIOD_DAYS, planBleedingReport, planPeriodRemoval, planPeriodRun } from './logging'
 import { aLog, aPeriodDay, aPeriodStart } from './__testutils__/fixtures'
 import type { DayLog, IsoDate } from './types'
 
@@ -148,5 +148,93 @@ describe('planPeriodRemoval', () => {
 
   test('returns nothing when the date is not a period day', () => {
     expect(planPeriodRemoval([], '2026-09-20')).toEqual([])
+  })
+})
+
+/** Apply a plan to a set of logs, as the repository would. */
+const apply = (logs: DayLog[], writes: { date: IsoDate; patch: Partial<DayLog> }[]): DayLog[] => {
+  const byDate = new Map(logs.map((l) => [l.logDate, { ...l }]))
+  for (const { date, patch } of writes) {
+    byDate.set(date, { ...(byDate.get(date) ?? aLog(date)), ...patch })
+  }
+  return [...byDate.values()].sort((a, b) => a.logDate.localeCompare(b.logDate))
+}
+
+const invariantsHold = (logs: DayLog[], cycleStart: IsoDate) => {
+  expect(logs.filter((l) => l.isPeriodStart).map((l) => l.logDate)).toEqual([cycleStart])
+  expect(logs.some((l) => l.isPeriod && l.noBleed)).toBe(false)
+}
+
+describe('planBleedingReport', () => {
+  // The screenshot case: an older start-only log, then day 5 is tapped.
+  const startOnly = [aPeriodStart('2026-09-20')]
+
+  test('yes on day 5 fills days 2-4 and never adds a start', () => {
+    const after = apply(startOnly, planBleedingReport(startOnly, '2026-09-20', '2026-09-24', true, 'light'))
+    expect(after.filter((l) => l.isPeriod).map((l) => l.logDate)).toEqual([
+      '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24',
+    ])
+    expect(after.find((l) => l.logDate === '2026-09-24')?.flow).toBe('light')
+    expect(after.some((l) => l.isPeriodEnd)).toBe(false)
+    invariantsHold(after, '2026-09-20')
+  })
+
+  test('no on day 5 confirms day 4 as the last day', () => {
+    const after = apply(startOnly, planBleedingReport(startOnly, '2026-09-20', '2026-09-24', false))
+    expect(after.filter((l) => l.isPeriod).map((l) => l.logDate)).toEqual([
+      '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23',
+    ])
+    expect(after.find((l) => l.logDate === '2026-09-23')?.isPeriodEnd).toBe(true)
+    expect(after.find((l) => l.logDate === '2026-09-24')?.noBleed).toBe(true)
+    invariantsHold(after, '2026-09-20')
+  })
+
+  test('no on day 3 of a booked 5-day period trims the rest', () => {
+    const booked = apply([], planPeriodRun([], '2026-09-20', 5))
+    const after = apply(booked, planBleedingReport(booked, '2026-09-20', '2026-09-22', false))
+    expect(after.filter((l) => l.isPeriod).map((l) => l.logDate)).toEqual(['2026-09-20', '2026-09-21'])
+    expect(after.filter((l) => l.isPeriodEnd).map((l) => l.logDate)).toEqual(['2026-09-21'])
+    invariantsHold(after, '2026-09-20')
+  })
+
+  test('yes past a booked end extends the period and unconfirms the end', () => {
+    const booked = apply([], planPeriodRun([], '2026-09-20', 5))
+    const after = apply(booked, planBleedingReport(booked, '2026-09-20', '2026-09-25', true, 'light'))
+    expect(after.filter((l) => l.isPeriod)).toHaveLength(6)
+    expect(after.some((l) => l.isPeriodEnd)).toBe(false)
+    invariantsHold(after, '2026-09-20')
+  })
+
+  test('yes inside a booked period keeps its end', () => {
+    const booked = apply([], planPeriodRun([], '2026-09-20', 5))
+    const after = apply(booked, planBleedingReport(booked, '2026-09-20', '2026-09-22', true, 'heavy'))
+    expect(after.filter((l) => l.isPeriodEnd).map((l) => l.logDate)).toEqual(['2026-09-24'])
+    expect(after.find((l) => l.logDate === '2026-09-22')?.flow).toBe('heavy')
+  })
+
+  test('a later Yes overrides an earlier No on the same day', () => {
+    const saidNo = apply(startOnly, planBleedingReport(startOnly, '2026-09-20', '2026-09-24', false))
+    const after = apply(saidNo, planBleedingReport(saidNo, '2026-09-20', '2026-09-24', true, 'light'))
+    const day = after.find((l) => l.logDate === '2026-09-24')
+    expect(day).toMatchObject({ isPeriod: true, noBleed: false })
+    expect(after.some((l) => l.isPeriodEnd)).toBe(false)
+    invariantsHold(after, '2026-09-20')
+  })
+
+  test('yes fill leaves an explicit not-bleeding day alone', () => {
+    const logs = [aPeriodStart('2026-09-20'), aLog('2026-09-22', { noBleed: true })]
+    const after = apply(logs, planBleedingReport(logs, '2026-09-20', '2026-09-24', true))
+    expect(after.find((l) => l.logDate === '2026-09-22')).toMatchObject({ isPeriod: false, noBleed: true })
+    invariantsHold(after, '2026-09-20')
+  })
+
+  test('a second No after a No only records the day', () => {
+    const logs = [aPeriodStart('2026-09-20', { isPeriodEnd: true }), aLog('2026-09-21', { noBleed: true })]
+    const writes = planBleedingReport(logs, '2026-09-20', '2026-09-22', false)
+    expect(writes.map((w) => w.date)).toEqual(['2026-09-22'])
+  })
+
+  test('does nothing on the start day itself', () => {
+    expect(planBleedingReport(startOnly, '2026-09-20', '2026-09-20', false)).toEqual([])
   })
 })

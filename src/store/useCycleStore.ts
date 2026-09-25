@@ -8,13 +8,14 @@
 
 import { create } from 'zustand'
 import { createEngine, type Engine } from '@/engine/predict'
-import type { CycleResolution, DayLog, IsoDate, Profile, Resolution } from '@/engine/types'
+import type { CycleResolution, DayLog, Flow, IsoDate, Profile, Resolution } from '@/engine/types'
 import { todayIso } from '@/lib/date'
 import { requestPersistence } from '@/data/db'
 import {
   localRepository,
   logPeriod,
   removePeriod,
+  reportBleeding,
   type ExportBundle,
 } from '@/data/repository'
 import { getSession, syncConfigured, syncNow, type SyncResult } from '@/data/sync'
@@ -46,6 +47,8 @@ interface State {
   logPeriod(startDate: IsoDate, lengthDays: number): Promise<void>
   /** Undo a logged period — the whole run, not just one day. */
   removePeriod(date: IsoDate): Promise<void>
+  /** "Were you bleeding this day?" for a day of the current period. */
+  reportBleeding(date: IsoDate, bleeding: boolean, flow?: Flow): Promise<void>
   resolveCycle(
     cycleStart: IsoDate,
     resolution: Resolution,
@@ -146,6 +149,13 @@ export const useCycleStore = create<State>((set, get) => ({
     await reload(set, get)
   },
 
+  async reportBleeding(date, bleeding, flow) {
+    const current = get().engine.cycles.find((c) => c.isCurrent)
+    if (!current) return
+    await reportBleeding(localRepository, current.startDate, date, bleeding, flow)
+    await reload(set, get)
+  },
+
   async resolveCycle(cycleStart, resolution, options) {
     await localRepository.resolveCycle(cycleStart, resolution, options)
     await reload(set, get)
@@ -156,7 +166,7 @@ export const useCycleStore = create<State>((set, get) => ({
    * Also files the resolution, so the original cycle is not queried again.
    */
   async insertMissedPeriod(date, cycleStart) {
-    await logPeriod(localRepository, date, get().profile.avgPeriodLength)
+    await logPeriod(localRepository, date, get().engine.prediction.periodLength)
     await localRepository.resolveCycle(cycleStart, 'missed_period', {
       note: `Missed period recorded on ${date}.`,
     })
