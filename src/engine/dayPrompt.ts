@@ -17,6 +17,8 @@ export type DayPrompt =
   | 'started'
   /** The existing "My period started this day". */
   | 'logStart'
+  /** Too soon for a new period, but spotting can be recorded. */
+  | 'spotting'
   | 'none'
 
 /**
@@ -47,7 +49,7 @@ export function dayPrompt(date: IsoDate, today: IsoDate, engine: Engine): DayPro
   if (nextPeriodExpected !== null && date >= nextPeriodExpected.earliest) return 'started'
 
   const cycleDay = diffDays(current.startDate, date) + 1
-  return cycleDay < LOG_START_FROM_CYCLE_DAY ? 'none' : 'logStart'
+  return cycleDay < LOG_START_FROM_CYCLE_DAY ? 'spotting' : 'logStart'
 }
 
 /**

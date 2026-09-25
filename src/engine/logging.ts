@@ -224,3 +224,24 @@ export function planBleedingReport(
 
   return writes
 }
+
+/**
+ * Spotting: light bleeding that is not a period. Stored as a spotting flow on
+ * a day that is not a period day, so nothing that derives cycles sees it.
+ */
+export const isSpottingOnly = (log: DayLog | null | undefined): boolean =>
+  log?.isPeriod !== true && log?.flow === 'spotting'
+
+/**
+ * Mark or clear spotting on a day outside a period.
+ *
+ * Spotting also counts as "not bleeding" for the period question. That keeps
+ * a spotting day from being filled in as a period day by a later "yes", and
+ * around the expected start it moves the estimate on exactly as "not yet"
+ * does — without ever recording a start.
+ */
+export function spottingPatch(on: boolean): Partial<DayLog> {
+  return on
+    ? { isPeriod: false, isPeriodStart: false, isPeriodEnd: false, flow: 'spotting', noBleed: true }
+    : { flow: null, noBleed: false }
+}

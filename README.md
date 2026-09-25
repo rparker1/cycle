@@ -16,6 +16,8 @@ PWA, with optional sync to your own Supabase project.
   and today's contraception guidance.
 - **Calendar** — colour-coded month view. Tap any day to report it: "were you
   bleeding?" during a period, "has it started?" when one is due, and symptoms.
+  Spotting outside a period is noted with a small dot and never counts as a
+  period start.
 - **Log day** — one button for period days, fertility signs and ovulation,
   with a gentle symptom check-in before an ovulation claim is recorded.
 - **History** — cycle list, length trend, and prompts to explain unusual cycles.

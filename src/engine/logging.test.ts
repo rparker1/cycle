@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { MAX_PERIOD_DAYS, planBleedingReport, planPeriodRemoval, planPeriodRun } from './logging'
+import { MAX_PERIOD_DAYS, isSpottingOnly, spottingPatch, planBleedingReport, planPeriodRemoval, planPeriodRun } from './logging'
 import { aLog, aPeriodDay, aPeriodStart } from './__testutils__/fixtures'
 import type { DayLog, IsoDate } from './types'
 
@@ -247,5 +247,34 @@ describe('planBleedingReport', () => {
     expect(planBleedingReport(startOnly, '2026-09-20', '2026-10-04', true)).not.toEqual([])
     expect(planBleedingReport(startOnly, '2026-09-20', '2026-10-05', false)).not.toEqual([])
     expect(planBleedingReport(startOnly, '2026-09-20', '2026-10-06', false)).toEqual([])
+  })
+})
+
+describe('spotting', () => {
+  test('is a spotting flow on a day that is not a period day', () => {
+    expect(isSpottingOnly(aLog('2026-09-10', { flow: 'spotting' }))).toBe(true)
+    expect(isSpottingOnly(aPeriodDay('2026-09-10', { flow: 'spotting' }))).toBe(false)
+    expect(isSpottingOnly(aLog('2026-09-10'))).toBe(false)
+    expect(isSpottingOnly(null)).toBe(false)
+  })
+
+  test('marking it never makes the day a period day or a start', () => {
+    expect(spottingPatch(true)).toMatchObject({
+      isPeriod: false,
+      isPeriodStart: false,
+      isPeriodEnd: false,
+      flow: 'spotting',
+      noBleed: true,
+    })
+  })
+
+  test('clearing it leaves the day unreported', () => {
+    expect(spottingPatch(false)).toEqual({ flow: null, noBleed: false })
+  })
+
+  test('a spotting day is not filled in as a period day by a later yes', () => {
+    const logs = [aPeriodStart('2026-09-20'), aLog('2026-09-22', spottingPatch(true))]
+    const writes = planBleedingReport(logs, '2026-09-20', '2026-09-24', true)
+    expect(writes.some((w) => w.date === '2026-09-22')).toBe(false)
   })
 })

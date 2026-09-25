@@ -12,7 +12,7 @@ import { Sheet } from './Sheet'
 import { Icon } from './Icon'
 import { Stepper } from './Stepper'
 import { useCycleStore } from '@/store/useCycleStore'
-import { MAX_PERIOD_DAYS } from '@/engine/logging'
+import { MAX_PERIOD_DAYS, spottingPatch } from '@/engine/logging'
 import { OVULATION_SIGNS, SYMPTOMS } from '@/lib/guidance'
 import { addDays } from '@/lib/date'
 import { formatRange, formatShort } from '@/lib/format'
@@ -140,11 +140,14 @@ export function LogDaySheet({ open, onClose }: Props) {
 
           <button
             className="option"
-            disabled={!continuing && !canStartToday}
-            style={continuing || canStartToday ? undefined : { opacity: 0.55 }}
-            onClick={() => {
-              if (!continuing && !canStartToday) return
-              setStep('period')
+            onClick={async () => {
+              if (continuing || canStartToday) {
+                setStep('period')
+                return
+              }
+              // Too soon for a new period: record spotting instead of a start.
+              await updateDay(today, spottingPatch(true))
+              finish()
             }}
           >
             <span
@@ -154,13 +157,15 @@ export function LogDaySheet({ open, onClose }: Props) {
               <Icon name="droplet" size={24} filled />
             </span>
             <span>
-              <span className="option__title">Period day</span>
+              <span className="option__title">
+                {continuing || canStartToday ? 'Period day' : 'Spotting'}
+              </span>
               <span className="option__sub">
                 {continuing
                   ? "I'm still bleeding today"
                   : canStartToday
                     ? "I'm bleeding today"
-                    : `Too soon for a new period (day ${todayAssessment.cycleDay ?? 1})`}
+                    : `Light bleeding on day ${todayAssessment.cycleDay ?? 1}, not a period`}
               </span>
             </span>
           </button>

@@ -818,6 +818,17 @@ p {
 }
 
 /* Sits under the number rather than over it, replacing the fertile dot. */
+/* Spotting: a small rose dot in the corner, so it never reads as a period day. */
+.day__spot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rose);
+}
+
 .day__spark {
   position: absolute;
   bottom: 3px;

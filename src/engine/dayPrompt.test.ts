@@ -29,12 +29,12 @@ describe('dayPrompt — zones', () => {
     // Assumed end is day 5 (24 Sep); the day after is 25 Sep.
     const engine = engineFor([aPeriodStart('2026-09-20')], '2026-09-26')
     expect(dayPrompt('2026-09-25', '2026-09-26', engine)).toBe('bleeding')
-    expect(dayPrompt('2026-09-26', '2026-09-26', engine)).toBe('none')
+    expect(dayPrompt('2026-09-26', '2026-09-26', engine)).toBe('spotting')
   })
 
   test('offers no new start before cycle day 15', () => {
     const engine = engineFor([aPeriodStart('2026-09-01')], '2026-09-20')
-    expect(dayPrompt('2026-09-14', '2026-09-20', engine)).toBe('none')
+    expect(dayPrompt('2026-09-14', '2026-09-20', engine)).toBe('spotting')
     expect(dayPrompt('2026-09-15', '2026-09-20', engine)).toBe('logStart')
   })
 
