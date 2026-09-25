@@ -33,12 +33,14 @@ export function dayPrompt(date: IsoDate, today: IsoDate, engine: Engine): DayPro
   if (date === current.startDate) return 'none'
 
   const { periodLength, nextPeriodExpected } = engine.prediction
-  // The planner (planBleedingReport) refuses any answer whose last bleeding
-  // day would land beyond cycle day MAX_PERIOD_DAYS — the longest period the
-  // app records — so the sheet must not ask a question it would refuse.
+  // The planner (planBleedingReport) accepts a "yes" only up to cycle day
+  // MAX_PERIOD_DAYS - 1 (it refuses once the last bleeding day would land
+  // beyond MAX_PERIOD_DAYS), so the zone stops there too — the last day a
+  // "yes" can be recorded — otherwise the sheet would offer flow chips whose
+  // answer is silently dropped.
   const bleedingZoneEnd = minIso(
     addDays(periodEndFor(current, periodLength), 1),
-    addDays(current.startDate, MAX_PERIOD_DAYS),
+    addDays(current.startDate, MAX_PERIOD_DAYS - 1),
   )
   if (date <= bleedingZoneEnd) return 'bleeding'
 

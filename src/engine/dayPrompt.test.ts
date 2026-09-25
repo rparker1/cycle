@@ -67,12 +67,12 @@ describe('dayPrompt — zones', () => {
     expect(dayPrompt('2026-09-20', '2026-09-20', engineFor([], '2026-09-20'))).toBe('logStart')
   })
 
-  test('never asks about bleeding past the longest period the app records', () => {
+  test('stops asking about bleeding after the last day a yes can be recorded', () => {
     // A run logged every day from 1 Sep keeps extending the assumed end.
     const logs = [aPeriodStart('2026-09-01'), ...Array.from({ length: 16 }, (_, i) =>
       aPeriodDay(`2026-09-${String(i + 2).padStart(2, '0')}`))]
     const engine = engineFor(logs, '2026-09-20')
-    expect(dayPrompt('2026-09-16', '2026-09-20', engine)).toBe('bleeding') // cycle day 16
-    expect(dayPrompt('2026-09-17', '2026-09-20', engine)).not.toBe('bleeding') // cycle day 17
+    expect(dayPrompt('2026-09-15', '2026-09-20', engine)).toBe('bleeding') // cycle day 15
+    expect(dayPrompt('2026-09-16', '2026-09-20', engine)).not.toBe('bleeding') // cycle day 16
   })
 })
