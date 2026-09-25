@@ -95,14 +95,17 @@ and no network; Supabase is backup and second-device sync only, behind the
 1. Create a project, then run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql)
    in the SQL Editor. It creates three tables with row-level security,
    `updated_at` triggers and delta-pull indexes.
-2. Copy `.env.example` to `.env` and fill in your project URL and publishable
+2. Run [`supabase/migrations/0002_no_bleed.sql`](supabase/migrations/0002_no_bleed.sql) after it.
+   Apply it before shipping a build that includes it, otherwise sync pushes fail on the
+   missing `no_bleed` column.
+3. Copy `.env.example` to `.env` and fill in your project URL and publishable
    key. Both are public by design and protected by RLS. **Never put a
    service-role key in this repository.**
-3. In the Supabase dashboard, create your account, then turn **off**
+4. In the Supabase dashboard, create your account, then turn **off**
    Authentication → Sign In / Providers → "Allow new users to sign up". This
    repository is public, so the project ref is public; RLS protects your rows
    but nothing else stops a stranger registering against your quota.
-4. Verify with Advisors → Security that no table reports missing RLS.
+5. Verify with Advisors → Security that no table reports missing RLS.
 
 Sync uses email and password rather than magic links: on iOS a magic link opens
 in Safari rather than the installed PWA, so the session lands in the wrong
