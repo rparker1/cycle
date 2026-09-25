@@ -152,7 +152,7 @@ export function DayDetailSheet({ date, onClose }: Props) {
               <StartedQuestion
                 log={log}
                 expected={engine.prediction.nextPeriodExpected}
-                onNotYet={() => void updateDay(date, { noBleed: true })}
+                onNotYet={() => void updateDay(date, { noBleed: !(log?.noBleed === true) })}
                 onStarted={() => setEditing(periodLength)}
               />
             )}
