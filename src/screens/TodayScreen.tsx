@@ -52,7 +52,7 @@ export function TodayScreen() {
               <CycleWheel
                 prediction={prediction}
                 cycleStart={currentCycle.startDate}
-                periodLength={profile.avgPeriodLength}
+                periodLength={prediction.periodLength}
               />
             </div>
 

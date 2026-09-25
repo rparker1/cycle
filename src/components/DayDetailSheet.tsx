@@ -3,8 +3,10 @@ import { Sheet } from './Sheet'
 import { Icon } from './Icon'
 import { Stepper } from './Stepper'
 import { GuidanceCard } from './GuidanceCard'
+import { BleedingQuestion, StartedQuestion, SymptomChips } from './DayReport'
 import { useCycleStore } from '@/store/useCycleStore'
 import { MAX_PERIOD_DAYS, periodLengthFor, periodStartFor } from '@/engine/logging'
+import { dayPrompt } from '@/engine/dayPrompt'
 import { PHASE_ICON, PHASE_LABEL } from '@/lib/guidance'
 import { formatLong, formatRange } from '@/lib/format'
 import { addDays } from '@/lib/date'
@@ -23,7 +25,7 @@ const FEEDBACK: { value: PredictionFeedback; label: string }[] = [
 ]
 
 export function DayDetailSheet({ date, onClose }: Props) {
-  const { engine, logs, today, profile, logPeriod, removePeriod, updateDay } = useCycleStore()
+  const { engine, logs, today, logPeriod, removePeriod, updateDay, reportBleeding } = useCycleStore()
 
   const log = useMemo(
     () => (date === null ? null : (logs.find((l) => l.logDate === date) ?? null)),
@@ -51,6 +53,8 @@ export function DayDetailSheet({ date, onClose }: Props) {
   const day = engine.assessDay(date)
   const isFuture = date > today
   const isLoggedPeriod = loggedStart !== null
+  const prompt = dayPrompt(date, today, engine)
+  const periodLength = engine.prediction.periodLength
 
   /*
    * Ovulation logging only where it makes sense. The old app offered
@@ -65,7 +69,7 @@ export function DayDetailSheet({ date, onClose }: Props) {
   // Editing an existing period changes its length from its real first day,
   // not from whichever day happened to be tapped.
   const runStart = loggedStart ?? date
-  const previewLength = editing ?? (isLoggedPeriod ? loggedLength : profile.avgPeriodLength)
+  const previewLength = editing ?? (isLoggedPeriod ? loggedLength : periodLength)
   const previewEnd = addDays(runStart, Math.max(1, previewLength) - 1)
 
   const commit = async () => {
@@ -133,40 +137,62 @@ export function DayDetailSheet({ date, onClose }: Props) {
               Cancel
             </button>
           </section>
-        ) : isLoggedPeriod ? (
-          <section className="card stack">
-            <div>
-              <p className="option__title">Period logged</p>
-              <p className="option__sub">
-                {formatRange(runStart, addDays(runStart, loggedLength - 1))} · {loggedLength}{' '}
-                {loggedLength === 1 ? 'day' : 'days'}
-              </p>
-            </div>
-            <div className="stat-grid">
-              <button className="btn btn--quiet" onClick={() => setEditing(loggedLength)}>
-                Change length
-              </button>
-              <button
-                className="btn btn--danger"
-                onClick={async () => {
-                  await removePeriod(date)
-                  onClose()
-                }}
-              >
-                Remove
-              </button>
-            </div>
-          </section>
         ) : (
-          !isFuture && (
-            <button
-              className="btn btn--primary btn--block"
-              onClick={() => setEditing(profile.avgPeriodLength)}
-            >
-              <Icon name="droplet" size={18} filled />
-              My period started this day
-            </button>
-          )
+          <>
+            {prompt === 'bleeding' && (
+              <BleedingQuestion
+                isToday={date === today}
+                log={log}
+                onBleeding={(flow) => void reportBleeding(date, true, flow)}
+                onNotBleeding={() => void reportBleeding(date, false)}
+              />
+            )}
+
+            {prompt === 'started' && !isLoggedPeriod && engine.prediction.nextPeriodExpected && (
+              <StartedQuestion
+                log={log}
+                expected={engine.prediction.nextPeriodExpected}
+                onNotYet={() => void updateDay(date, { noBleed: true })}
+                onStarted={() => setEditing(periodLength)}
+              />
+            )}
+
+            {isLoggedPeriod && (
+              <section className="card stack">
+                <div>
+                  <p className="option__title">Period logged</p>
+                  <p className="option__sub">
+                    {formatRange(runStart, addDays(runStart, loggedLength - 1))} · {loggedLength}{' '}
+                    {loggedLength === 1 ? 'day' : 'days'}
+                  </p>
+                </div>
+                <div className="stat-grid">
+                  <button className="btn btn--quiet" onClick={() => setEditing(loggedLength)}>
+                    Change length
+                  </button>
+                  <button
+                    className="btn btn--danger"
+                    onClick={async () => {
+                      await removePeriod(date)
+                      onClose()
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {prompt === 'logStart' && !isLoggedPeriod && (
+              <button
+                className="btn btn--primary btn--block"
+                onClick={() => setEditing(periodLength)}
+              >
+                <Icon name="droplet" size={18} filled />
+                My period started this day
+              </button>
+            )}
+          </>
         )}
 
         {/* ------------------------------------------------- ovulation -- */}
@@ -199,6 +225,14 @@ export function DayDetailSheet({ date, onClose }: Props) {
           </button>
         )}
 
+        {/* -------------------------------------------------- symptoms -- */}
+        {!isFuture && editing === null && (
+          <SymptomChips
+            selected={log?.symptoms ?? []}
+            onChange={(symptoms) => void updateDay(date, { symptoms })}
+          />
+        )}
+
         {/* -------------------------------------------------- feedback -- */}
         {!isFuture && editing === null && (
           <section>
@@ -222,8 +256,9 @@ export function DayDetailSheet({ date, onClose }: Props) {
               ))}
             </div>
             <p className="fine-print" style={{ marginTop: 8 }}>
-              Noted against this day so you can spot patterns in History. Only logged
-              periods and confirmed ovulation change the predictions themselves.
+              Symptoms and feedback are noted against this day so you can spot patterns.
+              Only period days, 'not yet' answers and confirmed ovulation change the
+              predictions.
             </p>
           </section>
         )}
