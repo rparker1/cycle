@@ -5,6 +5,7 @@ import { DayDetailSheet } from '@/components/DayDetailSheet'
 import { bandColour } from '@/components/CycleWheel'
 import { addDays, parseIso, toIso } from '@/lib/date'
 import { formatMonthYear } from '@/lib/format'
+import { isSpottingOnly } from '@/engine/logging'
 import type { IsoDate } from '@/engine/types'
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
@@ -18,11 +19,12 @@ function monthGrid(anchor: IsoDate): IsoDate[] {
 }
 
 export function CalendarScreen() {
-  const { engine, today } = useCycleStore()
+  const { engine, today, logs } = useCycleStore()
   const [anchor, setAnchor] = useState<IsoDate>(today)
   const [selected, setSelected] = useState<IsoDate | null>(null)
 
   const grid = useMemo(() => monthGrid(anchor), [anchor])
+  const logsByDate = useMemo(() => new Map(logs.map((l) => [l.logDate, l])), [logs])
   const anchorMonth = parseIso(anchor).getMonth()
 
   const shiftMonth = (by: number) => {
@@ -57,6 +59,7 @@ export function CalendarScreen() {
       <div className="cal__grid" role="grid">
         {grid.map((date) => {
           const day = engine.assessDay(date)
+          const spotting = isSpottingOnly(logsByDate.get(date))
           const outside = parseIso(date).getMonth() !== anchorMonth
 
           const classes = ['day']
@@ -76,6 +79,7 @@ export function CalendarScreen() {
             >
               {parseIso(date).getDate()}
               {day.isFertile && !day.isOvulation && <span className="day__dot" />}
+              {spotting && <span className="day__spot" aria-label="Spotting" />}
               {day.isOvulation && (
                 <span className="day__spark">
                   <Icon name="sparkles" size={11} strokeWidth={2.4} />
@@ -113,6 +117,10 @@ export function CalendarScreen() {
             Lower risk
           </span>
         )}
+        <span className="legend-item">
+          <span className="legend-dot" style={{ background: 'var(--rose)', width: 7, height: 7 }} />
+          Spotting
+        </span>
         <span className="legend-item">
           <span
             className="legend-dot"

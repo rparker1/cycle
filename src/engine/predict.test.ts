@@ -357,3 +357,25 @@ describe('late period', () => {
     }
   })
 })
+
+describe('spotting', () => {
+  const logs = periodStarts('2026-01-01', [28, 28, 28, 28])
+
+  test('mid-cycle spotting changes nothing', () => {
+    const before = createEngine(input(logs, '2026-05-02')).prediction
+    const after = createEngine(
+      input([...logs, aLog('2026-05-02', { flow: 'spotting', noBleed: true })], '2026-05-02'),
+    ).prediction
+    expect(after).toEqual(before)
+  })
+
+  test('spotting when the period is due moves the estimate on, like not yet', () => {
+    const { prediction } = createEngine(
+      input([...logs, aLog('2026-05-21', { flow: 'spotting', noBleed: true })], '2026-05-21'),
+    )
+    expect(prediction.nextPeriod?.likely).toBe('2026-05-22')
+    expect(prediction.fertileWindow).toEqual(
+      createEngine(input(logs, '2026-05-21')).prediction.fertileWindow,
+    )
+  })
+})

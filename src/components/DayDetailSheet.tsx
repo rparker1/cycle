@@ -3,9 +3,15 @@ import { Sheet } from './Sheet'
 import { Icon } from './Icon'
 import { Stepper } from './Stepper'
 import { GuidanceCard } from './GuidanceCard'
-import { BleedingQuestion, StartedQuestion, SymptomChips } from './DayReport'
+import { BleedingQuestion, SpottingToggle, StartedQuestion, SymptomChips } from './DayReport'
 import { useCycleStore } from '@/store/useCycleStore'
-import { MAX_PERIOD_DAYS, periodLengthFor, periodStartFor } from '@/engine/logging'
+import {
+  MAX_PERIOD_DAYS,
+  isSpottingOnly,
+  periodLengthFor,
+  periodStartFor,
+  spottingPatch,
+} from '@/engine/logging'
 import { dayPrompt } from '@/engine/dayPrompt'
 import { PHASE_ICON, PHASE_LABEL } from '@/lib/guidance'
 import { formatLong, formatRange } from '@/lib/format'
@@ -54,6 +60,13 @@ export function DayDetailSheet({ date, onClose }: Props) {
   const isFuture = date > today
   const isLoggedPeriod = loggedStart !== null
   const prompt = dayPrompt(date, today, engine)
+  const currentStart = engine.cycles.find((c) => c.isCurrent)?.startDate ?? null
+  // Spotting can happen on any day of the running cycle outside the period.
+  const offerSpotting =
+    !isLoggedPeriod &&
+    (prompt === 'spotting' ||
+      (prompt === 'logStart' && currentStart !== null && date > currentStart))
+  const spotting = isSpottingOnly(log)
   const periodLength = engine.prediction.periodLength
 
   /*
@@ -152,7 +165,15 @@ export function DayDetailSheet({ date, onClose }: Props) {
               <StartedQuestion
                 log={log}
                 expected={engine.prediction.nextPeriodExpected}
-                onNotYet={() => void updateDay(date, { noBleed: !(log?.noBleed === true) })}
+                onNotYet={() =>
+                  void updateDay(
+                    date,
+                    log?.noBleed === true && !spotting
+                      ? { noBleed: false }
+                      : { noBleed: true, flow: null },
+                  )
+                }
+                onSpotting={() => void updateDay(date, spottingPatch(!spotting))}
                 onStarted={() => setEditing(periodLength)}
               />
             )}
@@ -181,6 +202,14 @@ export function DayDetailSheet({ date, onClose }: Props) {
                   </button>
                 </div>
               </section>
+            )}
+
+            {offerSpotting && (
+              <SpottingToggle
+                isToday={date === today}
+                log={log}
+                onToggle={() => void updateDay(date, spottingPatch(!spotting))}
+              />
             )}
 
             {prompt === 'logStart' && !isLoggedPeriod && (

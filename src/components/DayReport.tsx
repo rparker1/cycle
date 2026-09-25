@@ -5,6 +5,7 @@
 
 import { Icon } from './Icon'
 import { SYMPTOMS } from '@/lib/guidance'
+import { isSpottingOnly } from '@/engine/logging'
 import { formatRange } from '@/lib/format'
 import type { DateRange, DayLog, Flow } from '@/engine/types'
 
@@ -62,20 +63,24 @@ interface StartedProps {
   log: DayLog | null
   expected: DateRange
   onNotYet(): void
+  onSpotting(): void
   onStarted(): void
 }
 
 /** "Has your period started?" on days the next period is due or late. */
-export function StartedQuestion({ log, expected, onNotYet, onStarted }: StartedProps) {
-  const notYet = log?.noBleed === true
+export function StartedQuestion({ log, expected, onNotYet, onSpotting, onStarted }: StartedProps) {
+  const spotting = isSpottingOnly(log)
+  const notYet = log?.noBleed === true && !spotting
   return (
     <section className="card stack">
       <div>
         <p className="option__title">Has your period started?</p>
         <p className="option__sub">
-          {notYet
-            ? 'You said not yet on this day.'
-            : `Expected ${formatRange(expected.earliest, expected.latest)}.`}
+          {spotting
+            ? 'You said just spotting on this day.'
+            : notYet
+              ? 'You said not yet on this day.'
+              : `Expected ${formatRange(expected.earliest, expected.latest)}.`}
         </p>
       </div>
       <div className="stat-grid">
@@ -87,6 +92,39 @@ export function StartedQuestion({ log, expected, onNotYet, onStarted }: StartedP
           It started this day
         </button>
       </div>
+      <button className="btn btn--quiet btn--block" aria-pressed={spotting} onClick={onSpotting}>
+        Just spotting
+      </button>
+    </section>
+  )
+}
+
+interface SpottingProps {
+  isToday: boolean
+  log: DayLog | null
+  onToggle(): void
+}
+
+/**
+ * Spotting on a day too early in the cycle for a new period. Recorded against
+ * the day for patterns; it never becomes a period day or a start.
+ */
+export function SpottingToggle({ isToday, log, onToggle }: SpottingProps) {
+  const spotting = isSpottingOnly(log)
+  return (
+    <section className="card stack">
+      <div>
+        <p className="option__title">{isToday ? 'Spotting today?' : 'Spotting this day?'}</p>
+        <p className="option__sub">
+          {spotting
+            ? 'Logged as spotting. It does not change your predictions.'
+            : "Light bleeding that isn't a period. Noted for patterns only."}
+        </p>
+      </div>
+      <button className="btn btn--quiet btn--block" aria-pressed={spotting} onClick={onToggle}>
+        <Icon name="droplet" size={18} />
+        {spotting ? 'Spotting logged' : 'Log spotting'}
+      </button>
     </section>
   )
 }
