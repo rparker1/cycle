@@ -23,7 +23,7 @@ export function TodayScreen() {
 
   return (
     <div className="screen">
-      <div className="stack">
+      <div className="stack stagger">
         <header>
           <p className="greeting">
             {greeting()}
