@@ -34,10 +34,10 @@ export function dayPrompt(date: IsoDate, today: IsoDate, engine: Engine): DayPro
 
   const { periodLength, nextPeriodExpected } = engine.prediction
   // The planner (planBleedingReport) accepts a "yes" only up to cycle day
-  // MAX_PERIOD_DAYS - 1 (it refuses once the last bleeding day would land
-  // beyond MAX_PERIOD_DAYS), so the zone stops there too — the last day a
-  // "yes" can be recorded — otherwise the sheet would offer flow chips whose
-  // answer is silently dropped.
+  // MAX_PERIOD_DAYS (it refuses once the last bleeding day would land beyond
+  // that), so the zone ends there too — the last day a "yes" can be
+  // recorded — otherwise the sheet would offer flow chips whose answer is
+  // silently dropped.
   const bleedingZoneEnd = minIso(
     addDays(periodEndFor(current, periodLength), 1),
     addDays(current.startDate, MAX_PERIOD_DAYS - 1),
@@ -48,4 +48,22 @@ export function dayPrompt(date: IsoDate, today: IsoDate, engine: Engine): DayPro
 
   const cycleDay = diffDays(current.startDate, date) + 1
   return cycleDay < LOG_START_FROM_CYCLE_DAY ? 'none' : 'logStart'
+}
+
+/**
+ * Whether a new period may be booked starting on `date`.
+ *
+ * Spec §2: "A period can never gain a second start from these screens." A
+ * start inside the running cycle before day 15 poisons the cycle history —
+ * it books a short cycle and drags the fertile window with it — so this is
+ * only true there when `dayPrompt` itself would already offer a start.
+ */
+export function canStartPeriodOn(date: IsoDate, today: IsoDate, engine: Engine): boolean {
+  if (date > today) return false
+
+  const current = engine.cycles.find((c) => c.isCurrent) ?? null
+  if (current === null || date <= current.startDate) return true
+
+  const prompt = dayPrompt(date, today, engine)
+  return prompt === 'started' || prompt === 'logStart'
 }

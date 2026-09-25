@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { dayPrompt } from './dayPrompt'
+import { canStartPeriodOn, dayPrompt } from './dayPrompt'
 import { createEngine } from './predict'
 import { aLog, aPeriodDay, aPeriodStart, aProfile, periodStarts } from './__testutils__/fixtures'
 import type { DayLog } from './types'
@@ -74,5 +74,41 @@ describe('dayPrompt — zones', () => {
     const engine = engineFor(logs, '2026-09-20')
     expect(dayPrompt('2026-09-15', '2026-09-20', engine)).toBe('bleeding') // cycle day 15
     expect(dayPrompt('2026-09-16', '2026-09-20', engine)).not.toBe('bleeding') // cycle day 16
+  })
+})
+
+describe('canStartPeriodOn', () => {
+  // Four regular 28-day cycles: starts on 1 Jan, 29 Jan, 26 Feb, 26 Mar,
+  // current start 23 Apr.
+  const logs = periodStarts('2026-01-01', [28, 28, 28, 28])
+
+  test('refuses a false start on cycle day 7 of a start-only period', () => {
+    const engine = engineFor(logs, '2026-04-29')
+    expect(canStartPeriodOn('2026-04-29', '2026-04-29', engine)).toBe(false)
+  })
+
+  test('allows re-booking the current start date', () => {
+    const engine = engineFor(logs, '2026-04-29')
+    expect(canStartPeriodOn('2026-04-23', '2026-04-29', engine)).toBe(true)
+  })
+
+  test('allows a date in the previous cycle', () => {
+    const engine = engineFor(logs, '2026-04-29')
+    expect(canStartPeriodOn('2026-04-01', '2026-04-29', engine)).toBe(true)
+  })
+
+  test('refuses a future date', () => {
+    const engine = engineFor(logs, '2026-04-29')
+    expect(canStartPeriodOn('2026-04-30', '2026-04-29', engine)).toBe(false)
+  })
+
+  test('allows a start once the next period is expected', () => {
+    const engine = engineFor(logs, '2026-05-21')
+    expect(canStartPeriodOn('2026-05-21', '2026-05-21', engine)).toBe(true)
+  })
+
+  test('allows a start on cycle day 15 of the current cycle', () => {
+    const engine = engineFor(logs, '2026-05-07')
+    expect(canStartPeriodOn('2026-05-07', '2026-05-07', engine)).toBe(true)
   })
 })

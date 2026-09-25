@@ -16,7 +16,7 @@ import { MAX_PERIOD_DAYS } from '@/engine/logging'
 import { OVULATION_SIGNS, SYMPTOMS } from '@/lib/guidance'
 import { addDays } from '@/lib/date'
 import { formatRange, formatShort } from '@/lib/format'
-import { dayPrompt } from '@/engine/dayPrompt'
+import { canStartPeriodOn, dayPrompt } from '@/engine/dayPrompt'
 import type { Flow } from '@/engine/types'
 
 type Step = 'choose' | 'period' | 'fertile' | 'ovulation' | 'done'
@@ -57,6 +57,8 @@ export function LogDaySheet({ open, onClose }: Props) {
    */
   const continuing = dayPrompt(today, today, engine) === 'bleeding'
   const currentStart = engine.cycles.find((c) => c.isCurrent)?.startDate ?? today
+  const canStartToday = canStartPeriodOn(today, today, engine)
+  const canStartOnChosenDate = canStartPeriodOn(startDate, today, engine)
 
   const ovulationPlausible =
     !todayAssessment.isPeriod &&
@@ -87,6 +89,8 @@ export function LogDaySheet({ open, onClose }: Props) {
     if (continuing) {
       await reportBleeding(today, true, flow)
     } else {
+      // Spec §2: a period can never gain a second start from these screens.
+      if (!canStartPeriodOn(startDate, today, engine)) return
       // The run first, so every day of the period exists.
       await logPeriod(startDate, periodLength)
     }
@@ -134,7 +138,15 @@ export function LogDaySheet({ open, onClose }: Props) {
         <div className="stack">
           <p className="muted">How does today feel?</p>
 
-          <button className="option" onClick={() => setStep('period')}>
+          <button
+            className="option"
+            disabled={!continuing && !canStartToday}
+            style={continuing || canStartToday ? undefined : { opacity: 0.55 }}
+            onClick={() => {
+              if (!continuing && !canStartToday) return
+              setStep('period')
+            }}
+          >
             <span
               className="option__icon"
               style={{ background: 'var(--rose-soft)', color: 'var(--rose)' }}
@@ -144,7 +156,11 @@ export function LogDaySheet({ open, onClose }: Props) {
             <span>
               <span className="option__title">Period day</span>
               <span className="option__sub">
-                {continuing ? "I'm still bleeding today" : "I'm bleeding today"}
+                {continuing
+                  ? "I'm still bleeding today"
+                  : canStartToday
+                    ? "I'm bleeding today"
+                    : `Too soon for a new period (day ${todayAssessment.cycleDay ?? 1})`}
               </span>
             </span>
           </button>
@@ -221,6 +237,13 @@ export function LogDaySheet({ open, onClose }: Props) {
                 Books in {formatRange(startDate, addDays(startDate, Math.max(1, periodLength) - 1))}.
                 You can change the length later by tapping any of those days.
               </p>
+
+              {!canStartOnChosenDate && (
+                <p className="fine-print" style={{ marginTop: -6, color: 'var(--rose-deep)' }}>
+                  That's too soon after the period that started {formatShort(currentStart)}.
+                  Pick an earlier or later date.
+                </p>
+              )}
             </>
           )}
 
@@ -275,7 +298,11 @@ export function LogDaySheet({ open, onClose }: Props) {
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
           </label>
 
-          <button className="btn btn--primary btn--block" onClick={() => void savePeriod()}>
+          <button
+            className="btn btn--primary btn--block"
+            disabled={!continuing && !canStartOnChosenDate}
+            onClick={() => void savePeriod()}
+          >
             {continuing ? 'Save today' : `Save ${periodLength}-day period`}
           </button>
         </div>
