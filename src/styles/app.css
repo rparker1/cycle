@@ -381,6 +381,13 @@ p {
   pointer-events: none;
 }
 
+/* A selected "No, not bleeding" / "Not yet" should look selected, the same
+   way a pressed chip does — same rose fill, same white text, same tokens. */
+.btn[aria-pressed='true'] {
+  background: var(--rose);
+  color: #fff;
+}
+
 /* Paired buttons share a narrow column; the default padding makes two-word
    labels wrap. */
 .stat-grid > .btn {
