@@ -9,6 +9,7 @@
 
 import { addDays, diffDays } from '@/lib/date'
 import { clamp, mad, median } from './stats'
+import { MAX_PERIOD_DAYS } from './logging'
 import type { Anomaly, Baseline, Cycle, CycleResolution, DayLog, IsoDate, Profile } from './types'
 
 /** How many recent cycles inform the baseline. */
@@ -28,6 +29,12 @@ const MISSED_PERIOD_RATIO = 1.5
 
 const LUTEAL_MIN = 9
 const LUTEAL_MAX = 17
+
+/** How many recent confirmed periods inform the learned period length. */
+const PERIOD_HISTORY_WINDOW = 6
+
+/** One confirmed period is an anecdote; two is the least that is a pattern. */
+const MIN_PERIODS_FOR_HISTORY = 2
 
 interface CompletedCycle extends Cycle {
   length: number
@@ -228,4 +235,22 @@ export function learnLutealLength(cycles: Cycle[], profile: Profile): number {
 
   if (observations.length === 0) return profile.lutealLength
   return clamp(Math.round(median(observations)), LUTEAL_MIN, LUTEAL_MAX)
+}
+
+/**
+ * Learn how long the user's periods actually last.
+ *
+ * A period counts once its last day has been confirmed — by a "no, not
+ * bleeding" the day after, or by booking a length — and that day is in the
+ * past. A length booked on day one for days that have not happened yet is a
+ * guess, not an observation, and must not teach the model anything.
+ */
+export function learnPeriodLength(cycles: Cycle[], today: IsoDate, profile: Profile): number {
+  const observations = cycles
+    .filter((c) => c.periodEndConfirmed && c.periodEndDate !== null && c.periodEndDate < today)
+    .map((c) => clamp(diffDays(c.startDate, c.periodEndDate as IsoDate) + 1, 1, MAX_PERIOD_DAYS))
+    .slice(-PERIOD_HISTORY_WINDOW)
+
+  if (observations.length < MIN_PERIODS_FOR_HISTORY) return profile.avgPeriodLength
+  return Math.round(median(observations))
 }

@@ -14,6 +14,7 @@ export function aLog(logDate: IsoDate, over: Partial<DayLog> = {}): DayLog {
     isPeriod: false,
     isPeriodStart: false,
     isPeriodEnd: false,
+    noBleed: false,
     flow: null,
     feltFertile: false,
     ovulationClaimed: false,

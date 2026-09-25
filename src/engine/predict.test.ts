@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { createEngine } from './predict'
 import {
   aConfirmedOvulation,
+  aLog,
   aPeriodDay,
   aPeriodStart,
   aProfile,
@@ -268,5 +269,91 @@ describe('assessDay current period shading', () => {
 
     expect(engine.assessDay('2026-09-21').isPeriod).toBe(true)
     expect(engine.assessDay('2026-09-21').isPredictedPeriod).toBe(false)
+  })
+})
+
+describe('learned period length', () => {
+  test('is reported and used for the assumed period', () => {
+    // Two confirmed 3-day periods, then a start-only current cycle.
+    const logs = [
+      aPeriodStart('2026-07-01'), aPeriodDay('2026-07-02'), aPeriodDay('2026-07-03', { isPeriodEnd: true }),
+      aPeriodStart('2026-07-29'), aPeriodDay('2026-07-30'), aPeriodDay('2026-07-31', { isPeriodEnd: true }),
+      aPeriodStart('2026-08-26'),
+    ]
+    const engine = createEngine(input(logs, '2026-08-29', aProfile({ avgPeriodLength: 5 })))
+    expect(engine.prediction.periodLength).toBe(3)
+    // Day 3 is still menstrual, day 4 is not — with 5 it would be day 5.
+    expect(engine.assessDay('2026-08-28').phase).toBe('menstrual')
+    expect(engine.assessDay('2026-08-29').phase).toBe('follicular')
+  })
+})
+
+describe('not-yet answers', () => {
+  // Four regular 28-day cycles; the current one started 2026-04-23, so the
+  // next period is most likely 2026-05-21 (earliest 05-20, latest 05-22).
+  // Spread is 1: the MAD of identical lengths is 0, floored at 1.
+  const logs = periodStarts('2026-01-01', [28, 28, 28, 28])
+
+  test('without one, the estimate is unchanged', () => {
+    const { prediction } = createEngine(input(logs, '2026-05-20'))
+    expect(prediction.nextPeriod).toEqual(prediction.nextPeriodExpected)
+  })
+
+  test('moves the earliest and likely dates past the answered day', () => {
+    const answered = [...logs, aLog('2026-05-21', { noBleed: true })]
+    const { prediction } = createEngine(input(answered, '2026-05-21'))
+    expect(prediction.nextPeriodExpected?.likely).toBe('2026-05-21')
+    expect(prediction.nextPeriod?.earliest).toBe('2026-05-22')
+    expect(prediction.nextPeriod?.likely).toBe('2026-05-22')
+    expect(prediction.nextPeriod?.latest).toBe('2026-05-22')
+  })
+
+  test('never leaves latest before likely', () => {
+    const answered = [...logs, aLog('2026-05-25', { noBleed: true })]
+    const { prediction } = createEngine(input(answered, '2026-05-25'))
+    expect(prediction.nextPeriod?.likely).toBe('2026-05-26')
+    const next = prediction.nextPeriod
+    expect(next && next.latest >= next.likely).toBe(true)
+  })
+
+  test('does not move ovulation, the fertile window or the protection window', () => {
+    const before = createEngine(input(logs, '2026-05-21')).prediction
+    const after = createEngine(
+      input([...logs, aLog('2026-05-21', { noBleed: true })], '2026-05-21'),
+    ).prediction
+    expect(after.ovulation).toEqual(before.ovulation)
+    expect(after.fertileWindow).toEqual(before.fertileWindow)
+    expect(after.protectionWindow).toEqual(before.protectionWindow)
+  })
+
+  test('ignores a not-bleeding day from the end of the current period', () => {
+    const answered = [...logs, aLog('2026-04-28', { noBleed: true })]
+    const { prediction } = createEngine(input(answered, '2026-05-02'))
+    expect(prediction.nextPeriod).toEqual(prediction.nextPeriodExpected)
+  })
+})
+
+describe('late period', () => {
+  const logs = periodStarts('2026-01-01', [28, 28, 28, 28])
+
+  test('is not late on the latest expected day', () => {
+    const { prediction } = createEngine(input(logs, '2026-05-22'))
+    expect(prediction.nextPeriodExpected?.latest).toBe('2026-05-22')
+    expect(prediction.periodLate).toBe(false)
+  })
+
+  test('is late the day after, and later days become uncertain', () => {
+    const engine = createEngine(input(logs, '2026-05-23'))
+    expect(engine.prediction.periodLate).toBe(true)
+    expect(engine.assessDay('2026-05-23')).toMatchObject({ risk: 'unknown', periodLate: true })
+    expect(engine.assessDay('2026-05-28')).toMatchObject({ risk: 'unknown', periodLate: true })
+  })
+
+  test('leaves days up to the latest expected day as they were', () => {
+    const onTime = createEngine(input(logs, '2026-05-22'))
+    const late = createEngine(input(logs, '2026-05-23'))
+    for (const d of ['2026-05-02', '2026-05-12', '2026-05-22']) {
+      expect(late.assessDay(d)).toEqual(onTime.assessDay(d))
+    }
   })
 })

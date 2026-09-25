@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import { analyseCycles, deriveCycles, learnLutealLength } from './cycles'
+import { analyseCycles, deriveCycles, learnLutealLength, learnPeriodLength } from './cycles'
+import type { DayLog } from './types'
 import {
   aConfirmedOvulation,
   aLog,
@@ -287,5 +288,72 @@ describe('learnLutealLength', () => {
     const cycles = deriveCycles(logs, '2026-02-10')
 
     expect(learnLutealLength(cycles, aProfile())).toBe(9)
+  })
+})
+
+/** A booked period: start, bleeding days, and a confirmed last day. */
+const bookedPeriod = (start: string, days: number): DayLog[] => {
+  const logs: DayLog[] = []
+  for (let i = 0; i < days; i++) {
+    const d = new Date(`${start}T00:00:00`)
+    d.setDate(d.getDate() + i)
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    logs.push(
+      i === 0
+        ? aPeriodStart(iso, { isPeriodEnd: days === 1 })
+        : aPeriodDay(iso, { isPeriodEnd: i === days - 1 }),
+    )
+  }
+  return logs
+}
+
+describe('learnPeriodLength', () => {
+  const profile = aProfile({ avgPeriodLength: 5 })
+
+  test('keeps the onboarding answer with no confirmed periods', () => {
+    const cycles = deriveCycles([aPeriodStart('2026-09-01')], '2026-09-20')
+    expect(learnPeriodLength(cycles, '2026-09-20', profile)).toBe(5)
+  })
+
+  test('keeps the onboarding answer with only one confirmed period', () => {
+    const logs = [...bookedPeriod('2026-08-01', 3), aPeriodStart('2026-08-29')]
+    expect(learnPeriodLength(deriveCycles(logs, '2026-09-10'), '2026-09-10', profile)).toBe(5)
+  })
+
+  test('uses the median once two periods are confirmed', () => {
+    const logs = [...bookedPeriod('2026-07-01', 3), ...bookedPeriod('2026-07-29', 4)]
+    // median of 3 and 4 is 3.5, rounded to 4
+    expect(learnPeriodLength(deriveCycles(logs, '2026-08-20'), '2026-08-20', profile)).toBe(4)
+  })
+
+  test('does not count a booked end that has not happened yet', () => {
+    const logs = [...bookedPeriod('2026-07-01', 3), ...bookedPeriod('2026-07-29', 7)]
+    // Today is day 3 of the second period; its booked end (4 Aug) is ahead.
+    expect(learnPeriodLength(deriveCycles(logs, '2026-07-31'), '2026-07-31', profile)).toBe(5)
+  })
+
+  test('uses only the six most recent confirmed periods', () => {
+    const logs = [
+      ...bookedPeriod('2026-01-01', 9),
+      ...bookedPeriod('2026-01-29', 9),
+      ...bookedPeriod('2026-02-26', 3),
+      ...bookedPeriod('2026-03-26', 3),
+      ...bookedPeriod('2026-04-23', 3),
+      ...bookedPeriod('2026-05-21', 3),
+      ...bookedPeriod('2026-06-18', 3),
+      ...bookedPeriod('2026-07-16', 3),
+    ]
+    expect(learnPeriodLength(deriveCycles(logs, '2026-08-01'), '2026-08-01', profile)).toBe(3)
+  })
+
+  test('ignores an unconfirmed period', () => {
+    const logs = [
+      ...bookedPeriod('2026-07-01', 3),
+      aPeriodStart('2026-07-29'),
+      aPeriodDay('2026-07-30'),
+      ...bookedPeriod('2026-08-26', 3),
+    ]
+    // Only two confirmed (3 and 3); the unconfirmed 2-day run is ignored.
+    expect(learnPeriodLength(deriveCycles(logs, '2026-09-10'), '2026-09-10', profile)).toBe(3)
   })
 })

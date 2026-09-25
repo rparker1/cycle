@@ -8,7 +8,7 @@
  */
 
 import { addDays, diffDays } from '@/lib/date'
-import type { DayLog, IsoDate } from './types'
+import type { DayLog, Flow, IsoDate } from './types'
 
 /** Longest period the app will record in one go. */
 export const MAX_PERIOD_DAYS = 15
@@ -68,6 +68,7 @@ export function planPeriodRun(
       isPeriod: true,
       isPeriodStart: i === 0,
       isPeriodEnd: i === length - 1,
+      noBleed: false,
     }
     // Leave a flow the user already chose; only fill a blank one.
     if (!current?.flow) patch.flow = 'medium'
@@ -129,4 +130,97 @@ export function periodLengthFor(logs: DayLog[], date: IsoDate): number {
   const start = periodStartFor(logs, date)
   if (start === null) return 0
   return existingRun(byDate(logs), start).length
+}
+
+/** A day filled in as bleeding because the days either side of it were. */
+const fillPatch = (current: DayLog | undefined): Partial<DayLog> => ({
+  isPeriod: true,
+  isPeriodEnd: false,
+  noBleed: false,
+  ...(current?.flow ? {} : { flow: 'medium' as const }),
+})
+
+/**
+ * Answer "were you bleeding this day?" for a day of the current period.
+ *
+ * Yes: the day bleeds, and unreported days back to the start are filled in,
+ * because a period is one run. Any end marked before this day was wrong.
+ * No: the day before becomes the confirmed last day, and booked days after
+ * this one are cleared.
+ *
+ * Never sets `isPeriodStart`. Setting it here is the false-second-start
+ * defect this exists to remove. An explicit "not bleeding" day is never
+ * overwritten by a fill — only by an answer about that day itself.
+ */
+export function planBleedingReport(
+  logs: DayLog[],
+  cycleStart: IsoDate,
+  date: IsoDate,
+  bleeding: boolean,
+  flow: Flow = 'medium',
+): DayWrite[] {
+  if (date <= cycleStart) return []
+
+  const lastBleedingDay = bleeding ? date : addDays(date, -1)
+  // 15 days is the longest period the app records; beyond it the answer
+  // cannot belong to this period, and filling back to cycleStart would
+  // invent history instead of describing this one.
+  if (diffDays(cycleStart, lastBleedingDay) + 1 > MAX_PERIOD_DAYS) return []
+
+  const existing = byDate(logs)
+  const writes: DayWrite[] = []
+  const alreadyEnded = !bleeding && existing.get(lastBleedingDay)?.noBleed === true
+
+  if (!alreadyEnded) {
+    for (let d = cycleStart; d < lastBleedingDay; d = addDays(d, 1)) {
+      const current = existing.get(d)
+      if (current?.noBleed === true) continue
+      if (current?.isPeriod === true) {
+        if (current.isPeriodEnd) writes.push({ date: d, patch: { isPeriodEnd: false } })
+        continue
+      }
+      writes.push({ date: d, patch: fillPatch(current) })
+    }
+  }
+
+  if (bleeding) {
+    const current = existing.get(date)
+    writes.push({
+      date,
+      patch: {
+        isPeriod: true,
+        noBleed: false,
+        flow,
+        // Keep an end the user booked for this very day; otherwise it is open.
+        isPeriodEnd: current?.isPeriod === true ? current.isPeriodEnd : false,
+      },
+    })
+    return writes
+  }
+
+  if (!alreadyEnded) {
+    const previous = existing.get(lastBleedingDay)
+    writes.push({
+      date: lastBleedingDay,
+      patch:
+        previous?.isPeriod === true
+          ? { isPeriodEnd: true }
+          : { ...fillPatch(previous), isPeriodEnd: true },
+    })
+  }
+
+  writes.push({
+    date,
+    patch: { isPeriod: false, isPeriodEnd: false, flow: null, noBleed: true },
+  })
+
+  // Booked days after this one belonged to a period that has now ended.
+  for (let d = addDays(date, 1); ; d = addDays(d, 1)) {
+    const current = existing.get(d)
+    if (current?.isPeriod !== true || current.isPeriodStart) break
+    writes.push({ date: d, patch: { isPeriod: false, isPeriodEnd: false, flow: null } })
+    if (writes.length > MAX_PERIOD_DAYS * 4) break
+  }
+
+  return writes
 }

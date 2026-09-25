@@ -7,10 +7,11 @@
  */
 
 import { todayIso } from '@/lib/date'
-import { planPeriodRemoval, planPeriodRun, type DayWrite } from '@/engine/logging'
+import { planBleedingReport, planPeriodRemoval, planPeriodRun, type DayWrite } from '@/engine/logging'
 import type { ProfileRecord } from './profileMerge'
-import type { CycleResolution, DayLog, IsoDate, Profile, Resolution } from '@/engine/types'
+import type { CycleResolution, DayLog, Flow, IsoDate, Profile, Resolution } from '@/engine/types'
 import { getDb } from './db'
+import { normaliseDayLog } from './normalise'
 
 const DEFAULT_PROFILE: Profile = {
   displayName: null,
@@ -69,6 +70,7 @@ function blankLog(date: IsoDate): DayLog {
     isPeriod: false,
     isPeriodStart: false,
     isPeriodEnd: false,
+    noBleed: false,
     flow: null,
     feltFertile: false,
     ovulationClaimed: false,
@@ -117,19 +119,21 @@ export const localRepository: CycleRepository = {
 
   async listDayLogs() {
     const db = await getDb()
-    return (await db.getAll('dayLogs')).filter((l) => l.deletedAt === null)
+    return (await db.getAll('dayLogs'))
+      .filter((l) => l.deletedAt === null)
+      .map(normaliseDayLog)
   },
 
   async getDayLog(date) {
     const db = await getDb()
     const log = await db.get('dayLogs', date)
-    return log && log.deletedAt === null ? log : null
+    return log && log.deletedAt === null ? normaliseDayLog(log) : null
   },
 
   async upsertDayLog(date, patch) {
     const db = await getDb()
     const existing = await db.get('dayLogs', date)
-    const base = existing ?? blankLog(date)
+    const base = existing ? normaliseDayLog(existing) : blankLog(date)
     const next: DayLog = { ...base, ...patch, logDate: date, updatedAt: now(), deletedAt: null }
     await db.put('dayLogs', next)
     return next
@@ -185,7 +189,7 @@ export const localRepository: CycleRepository = {
     }
     const db = await getDb()
     const tx = db.transaction(['dayLogs', 'resolutions', 'profile'], 'readwrite')
-    for (const log of bundle.dayLogs) await tx.objectStore('dayLogs').put(log)
+    for (const log of bundle.dayLogs) await tx.objectStore('dayLogs').put(normaliseDayLog(log))
     for (const r of bundle.resolutions) await tx.objectStore('resolutions').put(r)
     await tx.objectStore('profile').put({ ...bundle.profile, key: 'me', updatedAt: now() })
     await tx.done
@@ -223,6 +227,18 @@ export async function logPeriod(
 export async function removePeriod(repo: CycleRepository, date: IsoDate): Promise<void> {
   const logs = await repo.listDayLogs()
   await applyDayWrites(repo, planPeriodRemoval(logs, date))
+}
+
+/** Answer "were you bleeding this day?" for a day of the current period. */
+export async function reportBleeding(
+  repo: CycleRepository,
+  cycleStart: IsoDate,
+  date: IsoDate,
+  bleeding: boolean,
+  flow?: Flow,
+): Promise<void> {
+  const logs = await repo.listDayLogs()
+  await applyDayWrites(repo, planBleedingReport(logs, cycleStart, date, bleeding, flow))
 }
 
 async function applyDayWrites(repo: CycleRepository, writes: DayWrite[]): Promise<void> {
