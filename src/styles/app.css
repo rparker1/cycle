@@ -63,6 +63,10 @@ p {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    /* One pass, no delay: an infinite loop at 0.01ms would flicker, and a
+       staggered entrance would just look like things popping in late. */
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
   }
 }
@@ -196,6 +200,30 @@ p {
   box-shadow: var(--shadow-hero);
   padding: 22px 18px 18px;
   color: #fff;
+  isolation: isolate;
+}
+
+/*
+ * The moving background. An oversized layer behind the content, rotated
+ * slowly, so the gradient's direction drifts. Only `transform` animates,
+ * which the compositor handles without repainting the card.
+ */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: -60%;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 32% 30%, rgba(255, 255, 255, 0.2) 0, transparent 42%),
+    linear-gradient(150deg, var(--hero-from), var(--hero-to));
+  animation: hero-sweep 28s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes hero-sweep {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .hero__blob {
@@ -210,6 +238,7 @@ p {
   height: 150px;
   top: -44px;
   right: -36px;
+  animation: blob-float-a 14s ease-in-out infinite alternate;
 }
 
 .hero__blob--bl {
@@ -217,6 +246,78 @@ p {
   height: 190px;
   bottom: -90px;
   left: -70px;
+  animation: blob-float-b 18s ease-in-out infinite alternate;
+}
+
+/* Different lengths and directions, so the two never move in step. */
+@keyframes blob-float-a {
+  to {
+    transform: translate(-16px, 14px) scale(1.12);
+  }
+}
+
+@keyframes blob-float-b {
+  to {
+    transform: translate(18px, -12px) scale(0.9);
+  }
+}
+
+/* ---------------------------------------------------------- cycle wheel -- */
+
+/* Each band draws itself round, one after another, when the wheel appears. */
+.wheel__run {
+  stroke-dasharray: 1;
+  animation: wheel-draw 0.7s var(--ease) both;
+}
+
+@keyframes wheel-draw {
+  from {
+    stroke-dashoffset: 1;
+    opacity: 0;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+/* A soft ring that spreads out from today's marker. */
+.wheel__pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: marker-pulse 2.4s ease-out 0.8s infinite;
+}
+
+@keyframes marker-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  to {
+    transform: scale(2.3);
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------------ entrances -- */
+
+/* Children rise in one after another. Used on the Today screen. */
+.stagger > * {
+  animation: rise-in 0.5s var(--ease) both;
+}
+
+.stagger > *:nth-child(2) { animation-delay: 60ms; }
+.stagger > *:nth-child(3) { animation-delay: 120ms; }
+.stagger > *:nth-child(4) { animation-delay: 180ms; }
+.stagger > *:nth-child(5) { animation-delay: 240ms; }
+.stagger > *:nth-child(6) { animation-delay: 300ms; }
+.stagger > *:nth-child(n + 7) { animation-delay: 360ms; }
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
 }
 
 .hero__phase {
@@ -432,7 +533,11 @@ p {
   color: var(--ink-soft);
   font-size: 15px;
   font-weight: 600;
-  transition: transform 0.12s var(--ease);
+  transition:
+    transform 0.12s var(--ease),
+    background-color 0.18s var(--ease),
+    border-color 0.18s var(--ease),
+    color 0.18s var(--ease);
 }
 
 .chip:active {

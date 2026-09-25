@@ -126,18 +126,22 @@ export function CycleWheel({ prediction, cycleStart, periodLength, size = 224 }:
         strokeWidth={THICKNESS}
       />
 
-      {runs.map((run) => {
+      {runs.map((run, i) => {
         const start = run.from * degPerDay + GAP / 2
         const end = (run.to + 1) * degPerDay - GAP / 2
         if (end <= start) return null
         return (
           <path
             key={`${run.band}-${run.from}`}
+            className="wheel__run"
+            // Normalised length, so the draw-in animation works for any arc.
+            pathLength={1}
             d={arcPath(start, end)}
             fill="none"
             stroke={bandColour(run.band, learning)}
             strokeWidth={THICKNESS}
             strokeLinecap="round"
+            style={{ animationDelay: `${i * 90}ms` }}
           />
         )
       })}
@@ -147,6 +151,8 @@ export function CycleWheel({ prediction, cycleStart, periodLength, size = 224 }:
       )}
 
       <circle cx={CENTRE} cy={CENTRE} r={RADIUS - THICKNESS / 2 - 3.5} fill="#fff" />
+
+      <circle className="wheel__pulse" cx={mx} cy={my} r={4.6} fill="#fff" />
 
       <circle
         cx={mx}
