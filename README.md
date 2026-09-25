@@ -14,7 +14,8 @@ PWA, with optional sync to your own Supabase project.
 
 - **Today** — a cycle wheel showing where you are, days to your next period,
   and today's contraception guidance.
-- **Calendar** — colour-coded month view; tap any day for its detail.
+- **Calendar** — colour-coded month view. Tap any day to report it: "were you
+  bleeding?" during a period, "has it started?" when one is due, and symptoms.
 - **Log day** — one button for period days, fertility signs and ovulation,
   with a gentle symptom check-in before an ovulation claim is recorded.
 - **History** — cycle list, length trend, and prompts to explain unusual cycles.
@@ -24,7 +25,7 @@ PWA, with optional sync to your own Supabase project.
 
 The engine (`src/engine/`) is pure: no storage, no network, and "today" is an
 argument rather than a clock read. That makes every claim it makes testable,
-and it is tested — `npm test` runs 86 cases against it.
+and it is tested — `npm test` runs 154 cases against it.
 
 **Baseline is a median, not a mean.** The median of your last six cycles, with
 median absolute deviation for spread. A single 44-day cycle moves a mean by
@@ -49,6 +50,16 @@ phase length, rather than forwards as `cycleLength − 14`. The luteal phase is
 the stabler half of the cycle. Each time you confirm ovulation and the next
 period then arrives, the app measures your actual luteal length and updates its
 running median.
+
+**Period length is learned, not assumed.** Once two periods have a confirmed
+last day — a "no, not bleeding" the day after, or a booked length that has
+passed — their median replaces the onboarding answer.
+
+**"Not yet" moves the next period, and nothing else.** Answering "has your
+period started? — not yet" rules that day out, so the estimate never sits on a
+day you have already had. Ovulation and the fertile window stay where they
+were: moving them could only pull caution earlier. Once the period is past its
+latest expected day, later days are shown as uncertain, not lower risk.
 
 **Predictions are ranges.** "Most likely 3 Oct, window 1–6 Oct" — never a
 single confident date the model has no right to claim.
