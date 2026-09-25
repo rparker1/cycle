@@ -7,7 +7,7 @@
  */
 
 import { addDays, diffDays, isWithin, maxIso } from '@/lib/date'
-import { analyseCycles, deriveCycles, learnLutealLength } from './cycles'
+import { analyseCycles, deriveCycles, learnLutealLength, learnPeriodLength } from './cycles'
 import type {
   Confidence,
   Cycle,
@@ -42,6 +42,7 @@ export function createEngine(engineInput: EngineInput): Engine {
   const cycles = deriveCycles(liveLogs, today)
   const { baseline, anomalies } = analyseCycles(cycles, resolutions, profile)
   const lutealLength = learnLutealLength(cycles, profile)
+  const periodLength = learnPeriodLength(cycles, today, profile)
 
   const current = cycles.find((c) => c.isCurrent) ?? null
   const logsByDate = new Map(liveLogs.map((l) => [l.logDate, l]))
@@ -63,6 +64,9 @@ export function createEngine(engineInput: EngineInput): Engine {
         baseline,
         lutealLength,
         nextPeriod: null,
+        nextPeriodExpected: null,
+        periodLength,
+        periodLate: false,
         ovulation: null,
         ovulationConfirmed: false,
         fertileWindow: null,
@@ -77,17 +81,46 @@ export function createEngine(engineInput: EngineInput): Engine {
   const cycleLength = Math.round(baseline.length)
   const spread = Math.max(1, Math.round(baseline.spread))
 
-  const nextPeriodLikely = addDays(current.startDate, cycleLength)
-  const nextPeriod = {
-    earliest: addDays(nextPeriodLikely, -spread),
-    likely: nextPeriodLikely,
-    latest: addDays(nextPeriodLikely, spread),
+  const expectedLikely = addDays(current.startDate, cycleLength)
+  const nextPeriodExpected = {
+    earliest: addDays(expectedLikely, -spread),
+    likely: expectedLikely,
+    latest: addDays(expectedLikely, spread),
   }
+
+  /*
+   * "Has your period started? — Not yet." Each answer on or after the
+   * earliest expected day rules that day out, so the estimate cannot sit on
+   * a day the user has already lived through without bleeding. Only the
+   * period estimate moves: ovulation stays anchored to the original
+   * expectation, because moving it could only pull caution earlier.
+   */
+  const lastNotYet = liveLogs
+    .filter(
+      (l) =>
+        l.noBleed === true &&
+        l.logDate >= nextPeriodExpected.earliest &&
+        l.logDate <= today,
+    )
+    .map((l) => l.logDate)
+    .sort()
+    .pop()
+  const floor = lastNotYet === undefined ? null : addDays(lastNotYet, 1)
+
+  const nextPeriodLikely = floor === null ? expectedLikely : maxIso(expectedLikely, floor)
+  const nextPeriod = {
+    earliest:
+      floor === null ? nextPeriodExpected.earliest : maxIso(nextPeriodExpected.earliest, floor),
+    likely: nextPeriodLikely,
+    latest: maxIso(nextPeriodExpected.latest, nextPeriodLikely),
+  }
+
+  const periodLate = today > nextPeriodExpected.latest
 
   const ovulationConfirmed = current.confirmedOvulation !== null
   const ovulationLikely = ovulationConfirmed
     ? (current.confirmedOvulation as IsoDate)
-    : addDays(nextPeriodLikely, -lutealLength)
+    : addDays(expectedLikely, -lutealLength)
 
   const ovulation = {
     earliest: ovulationConfirmed ? ovulationLikely : addDays(ovulationLikely, -spread),
@@ -111,10 +144,13 @@ export function createEngine(engineInput: EngineInput): Engine {
   const prediction: Prediction = {
     today,
     cycleDay: diffDays(current.startDate, today) + 1,
-    phase: phaseFor(today, current, ovulationLikely, profile.avgPeriodLength),
+    phase: phaseFor(today, current, ovulationLikely, periodLength),
     baseline,
     lutealLength,
     nextPeriod,
+    nextPeriodExpected,
+    periodLength,
+    periodLate,
     ovulation,
     ovulationConfirmed,
     fertileWindow,
@@ -123,18 +159,14 @@ export function createEngine(engineInput: EngineInput): Engine {
     anomalies,
   }
 
-  const predictedPeriodEnd = addDays(nextPeriodLikely, profile.avgPeriodLength - 1)
+  const predictedPeriodEnd = addDays(nextPeriodLikely, periodLength - 1)
 
   /*
    * The days this period is still expected to run. Most people tap "period"
    * on day one and then get on with their life, so without this the calendar
    * would show a single shaded day for a five-day period.
    */
-  const currentStart = current.startDate
-  const currentPeriodEnd =
-    current.periodEndConfirmed && current.periodEndDate !== null
-      ? current.periodEndDate
-      : addDays(currentStart, Math.max(1, profile.avgPeriodLength) - 1)
+  const currentPeriodEnd = periodEndFor(current, periodLength)
 
   function assessDay(date: IsoDate): DayAssessment {
     const cycle = cycleContaining(cycles, date)
@@ -144,28 +176,31 @@ export function createEngine(engineInput: EngineInput): Engine {
     // future are described from predictions.
     const isFertile = isWithin(date, fertileWindow.start, fertileWindow.end)
     const inBuffer = isWithin(date, protectionWindow.start, protectionWindow.end)
+    const lateDay = periodLate && date > nextPeriodExpected.latest
 
     const risk: RiskLevel = isFertile
       ? 'high'
       : inBuffer
         ? 'elevated'
-        : baseline.eligibleCount >= CONFIDENCE_FAIR_AT
-          ? 'lower'
-          : 'unknown'
+        : lateDay
+          ? 'unknown'
+          : baseline.eligibleCount >= CONFIDENCE_FAIR_AT
+            ? 'lower'
+            : 'unknown'
 
     return {
       date,
       cycleDay: cycle === null ? null : diffDays(cycle.startDate, date) + 1,
-      phase:
-        cycle === null ? null : phaseFor(date, cycle, ovulationLikely, profile.avgPeriodLength),
+      phase: cycle === null ? null : phaseFor(date, cycle, ovulationLikely, periodLength),
       risk,
       isPeriod: log?.isPeriod === true,
       isPredictedPeriod:
         log?.isPeriod !== true &&
         (isWithin(date, nextPeriodLikely, predictedPeriodEnd) ||
-          isWithin(date, currentStart, currentPeriodEnd)),
+          isWithin(date, current!.startDate, currentPeriodEnd)),
       isOvulation: date === ovulationLikely,
       isFertile,
+      periodLate: lateDay,
     }
   }
 
@@ -181,27 +216,33 @@ function cycleContaining(cycles: Cycle[], date: IsoDate): Cycle | null {
 }
 
 /**
+ * Last day of a cycle's period, as the engine understands it.
+ *
+ * The explicitly marked end where the user set one. Otherwise whichever is
+ * later: the last day they happened to log, or the period length.
+ */
+export function periodEndFor(cycle: Cycle, periodLength: number): IsoDate {
+  if (cycle.periodEndConfirmed && cycle.periodEndDate !== null) return cycle.periodEndDate
+  const assumedEnd = addDays(cycle.startDate, Math.max(1, periodLength) - 1)
+  return maxIso(cycle.periodEndDate ?? cycle.startDate, assumedEnd)
+}
+
+/**
  * The phase a date falls in.
  *
  * Menstrual runs to the explicitly marked period end where the user set one.
  * Otherwise it runs to whichever is later: the last day they happened to log,
- * or their stated average period length. Logging every bleeding day is
- * optional, and someone who taps "period" on day one and then gets on with
- * their life should not be told they are follicular on day two.
+ * or their period length. Logging every bleeding day is optional, and
+ * someone who taps "period" on day one and then gets on with their life
+ * should not be told they are follicular on day two.
  */
 function phaseFor(
   date: IsoDate,
   cycle: Cycle,
   ovulationDate: IsoDate,
-  avgPeriodLength: number,
+  periodLength: number,
 ): Phase {
-  const assumedEnd = addDays(cycle.startDate, Math.max(1, avgPeriodLength) - 1)
-  const periodEnd =
-    cycle.periodEndConfirmed && cycle.periodEndDate !== null
-      ? cycle.periodEndDate
-      : maxIso(cycle.periodEndDate ?? cycle.startDate, assumedEnd)
-
-  if (date <= periodEnd) return 'menstrual'
+  if (date <= periodEndFor(cycle, periodLength)) return 'menstrual'
   if (date === ovulationDate) return 'ovulation'
   if (date < ovulationDate) return 'follicular'
   return 'luteal'
@@ -217,6 +258,7 @@ function emptyAssessment(date: IsoDate): DayAssessment {
     isPredictedPeriod: false,
     isOvulation: false,
     isFertile: false,
+    periodLate: false,
   }
 }
 

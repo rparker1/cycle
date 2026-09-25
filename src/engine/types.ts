@@ -132,6 +132,12 @@ export interface Prediction {
   baseline: Baseline
   lutealLength: number
   nextPeriod: DateRange | null
+  /** The next-period estimate before any "not yet" answers moved it. */
+  nextPeriodExpected: DateRange | null
+  /** Learned from confirmed periods, or the onboarding answer. */
+  periodLength: number
+  /** Today is past the latest expected start and no new period is logged. */
+  periodLate: boolean
   ovulation: DateRange | null
   ovulationConfirmed: boolean
   /** Biological window: ovulation −5 to +1. */
@@ -151,6 +157,8 @@ export interface DayAssessment {
   isPredictedPeriod: boolean
   isOvulation: boolean
   isFertile: boolean
+  /** This day falls after the latest expected start of a late period. */
+  periodLate: boolean
 }
 
 export interface EngineInput {

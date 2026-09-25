@@ -47,6 +47,15 @@ export function guidanceFor(day: DayAssessment, prediction: Prediction): Guidanc
     }
   }
 
+  if (day.periodLate) {
+    return {
+      tone: 'unknown',
+      title: 'Your period is later than expected',
+      body: "Cycle's estimates are unreliable until it arrives, so treat every day as uncertain and use protection.",
+      icon: 'help',
+    }
+  }
+
   if (day.risk === 'unknown') {
     return {
       tone: 'unknown',
