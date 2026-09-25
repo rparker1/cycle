@@ -32,7 +32,9 @@ export function BleedingQuestion({ isToday, log, onBleeding, onNotBleeding }: Bl
             ? 'Logged as a period day.'
             : notBleeding
               ? 'Logged as not bleeding.'
-              : 'Tap a flow if you were.'}
+              : isToday
+                ? 'Tap a flow if you are.'
+                : 'Tap a flow if you were.'}
         </p>
       </div>
       <div className="chip-wrap">
