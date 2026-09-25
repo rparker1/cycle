@@ -237,4 +237,15 @@ describe('planBleedingReport', () => {
   test('does nothing on the start day itself', () => {
     expect(planBleedingReport(startOnly, '2026-09-20', '2026-09-20', false)).toEqual([])
   })
+
+  test('refuses a yes beyond the longest period the app records', () => {
+    // Cycle day 16 from a 20 Sep start is 5 Oct.
+    expect(planBleedingReport(startOnly, '2026-09-20', '2026-10-05', true)).toEqual([])
+  })
+
+  test('accepts a yes on the last allowed day and a no the day after', () => {
+    expect(planBleedingReport(startOnly, '2026-09-20', '2026-10-04', true)).not.toEqual([])
+    expect(planBleedingReport(startOnly, '2026-09-20', '2026-10-05', false)).not.toEqual([])
+    expect(planBleedingReport(startOnly, '2026-09-20', '2026-10-06', false)).toEqual([])
+  })
 })

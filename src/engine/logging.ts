@@ -161,9 +161,14 @@ export function planBleedingReport(
 ): DayWrite[] {
   if (date <= cycleStart) return []
 
+  const lastBleedingDay = bleeding ? date : addDays(date, -1)
+  // 15 days is the longest period the app records; beyond it the answer
+  // cannot belong to this period, and filling back to cycleStart would
+  // invent history instead of describing this one.
+  if (diffDays(cycleStart, lastBleedingDay) + 1 > MAX_PERIOD_DAYS) return []
+
   const existing = byDate(logs)
   const writes: DayWrite[] = []
-  const lastBleedingDay = bleeding ? date : addDays(date, -1)
   const alreadyEnded = !bleeding && existing.get(lastBleedingDay)?.noBleed === true
 
   if (!alreadyEnded) {
