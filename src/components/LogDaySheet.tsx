@@ -15,7 +15,8 @@ import { useCycleStore } from '@/store/useCycleStore'
 import { MAX_PERIOD_DAYS } from '@/engine/logging'
 import { OVULATION_SIGNS, SYMPTOMS } from '@/lib/guidance'
 import { addDays } from '@/lib/date'
-import { formatRange } from '@/lib/format'
+import { formatRange, formatShort } from '@/lib/format'
+import { dayPrompt } from '@/engine/dayPrompt'
 import type { Flow } from '@/engine/types'
 
 type Step = 'choose' | 'period' | 'fertile' | 'ovulation' | 'done'
@@ -28,11 +29,11 @@ interface Props {
 const FLOWS: Flow[] = ['spotting', 'light', 'medium', 'heavy']
 
 export function LogDaySheet({ open, onClose }: Props) {
-  const { today, logs, engine, profile, logPeriod, updateDay } = useCycleStore()
+  const { today, logs, engine, logPeriod, updateDay, reportBleeding } = useCycleStore()
   const [step, setStep] = useState<Step>('choose')
 
   const [startDate, setStartDate] = useState(today)
-  const [periodLength, setPeriodLength] = useState(profile.avgPeriodLength)
+  const [periodLength, setPeriodLength] = useState(engine.prediction.periodLength)
   const [flow, setFlow] = useState<Flow>('medium')
   const [symptoms, setSymptoms] = useState<string[]>([])
   const [activity, setActivity] = useState(false)
@@ -49,6 +50,14 @@ export function LogDaySheet({ open, onClose }: Props) {
    * is its own kind of confusing — but it explains itself and does nothing.
    */
   const todayAssessment = engine.assessDay(today)
+
+  /*
+   * Day five of a period is not a new period. Booking a run from today would
+   * record a second start inside the first and poison the cycle history.
+   */
+  const continuing = dayPrompt(today, today, engine) === 'bleeding'
+  const currentStart = engine.cycles.find((c) => c.isCurrent)?.startDate ?? today
+
   const ovulationPlausible =
     !todayAssessment.isPeriod &&
     todayAssessment.cycleDay !== null &&
@@ -58,7 +67,7 @@ export function LogDaySheet({ open, onClose }: Props) {
     if (!open) return
     setStep('choose')
     setStartDate(today)
-    setPeriodLength(profile.avgPeriodLength)
+    setPeriodLength(engine.prediction.periodLength)
     setFlow(existing?.flow ?? 'medium')
     setSymptoms(existing?.symptoms ?? [])
     setActivity(existing?.sexualActivity === true)
@@ -75,10 +84,14 @@ export function LogDaySheet({ open, onClose }: Props) {
   const finish = () => setStep('done')
 
   const savePeriod = async () => {
-    // The run first, so every day of the period exists, then the detail that
-    // belongs to the day the user is actually describing.
-    await logPeriod(startDate, periodLength)
-    await updateDay(startDate, {
+    if (continuing) {
+      await reportBleeding(today, true, flow)
+    } else {
+      // The run first, so every day of the period exists.
+      await logPeriod(startDate, periodLength)
+    }
+    // Then the detail that belongs to the day the user is actually describing.
+    await updateDay(continuing ? today : startDate, {
       flow,
       symptoms,
       sexualActivity: activity ? true : null,
@@ -103,7 +116,7 @@ export function LogDaySheet({ open, onClose }: Props) {
     step === 'choose'
       ? 'Log your day'
       : step === 'period'
-        ? 'Log a period'
+        ? continuing ? 'Still bleeding' : 'Log a period'
         : step === 'fertile'
           ? 'Fertility signs'
           : step === 'ovulation'
@@ -130,7 +143,9 @@ export function LogDaySheet({ open, onClose }: Props) {
             </span>
             <span>
               <span className="option__title">Period day</span>
-              <span className="option__sub">I'm bleeding today</span>
+              <span className="option__sub">
+                {continuing ? "I'm still bleeding today" : "I'm bleeding today"}
+              </span>
             </span>
           </button>
 
@@ -175,29 +190,39 @@ export function LogDaySheet({ open, onClose }: Props) {
 
       {step === 'period' && (
         <div className="stack">
-          <label className="field">
-            <span className="label">First day of this period</span>
-            <input
-              type="date"
-              value={startDate}
-              max={today}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
-          </label>
+          {continuing && (
+            <p className="muted">
+              Adds today to the period that started {formatShort(currentStart)}.
+            </p>
+          )}
 
-          <Stepper
-            label="How many days did it last?"
-            suffix="days"
-            value={periodLength}
-            min={1}
-            max={MAX_PERIOD_DAYS}
-            onChange={setPeriodLength}
-          />
+          {!continuing && (
+            <>
+              <label className="field">
+                <span className="label">First day of this period</span>
+                <input
+                  type="date"
+                  value={startDate}
+                  max={today}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </label>
 
-          <p className="fine-print" style={{ marginTop: -6 }}>
-            Books in {formatRange(startDate, addDays(startDate, Math.max(1, periodLength) - 1))}.
-            You can change the length later by tapping any of those days.
-          </p>
+              <Stepper
+                label="How many days did it last?"
+                suffix="days"
+                value={periodLength}
+                min={1}
+                max={MAX_PERIOD_DAYS}
+                onChange={setPeriodLength}
+              />
+
+              <p className="fine-print" style={{ marginTop: -6 }}>
+                Books in {formatRange(startDate, addDays(startDate, Math.max(1, periodLength) - 1))}.
+                You can change the length later by tapping any of those days.
+              </p>
+            </>
+          )}
 
           <div>
             <p className="label" style={{ marginBottom: 8 }}>
@@ -251,7 +276,7 @@ export function LogDaySheet({ open, onClose }: Props) {
           </label>
 
           <button className="btn btn--primary btn--block" onClick={() => void savePeriod()}>
-            Save {periodLength}-day period
+            {continuing ? 'Save today' : `Save ${periodLength}-day period`}
           </button>
         </div>
       )}
